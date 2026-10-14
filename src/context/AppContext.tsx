@@ -191,8 +191,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Dynamic greeting using device local time and current logged in name
   const greetingText = useMemo(() => {
-    const displayName = currentUser ? (currentUser.displayName || userProfile.fullName) : null;
-    return getTimeGreeting(language, displayName);
+    let activeName: string | null = null;
+    if (currentUser) {
+      if (currentUser.displayName && currentUser.displayName.trim()) {
+        activeName = currentUser.displayName.trim();
+      } else if (
+        userProfile.fullName && 
+        userProfile.fullName.trim() && 
+        userProfile.fullName !== 'Comfort Member' && 
+        userProfile.fullName !== 'Comfort Nyoni'
+      ) {
+        activeName = userProfile.fullName.trim();
+      } else if (currentUser.email) {
+        if (currentUser.email.endsWith('@comfortskills.com')) {
+          activeName = currentUser.email.replace('@comfortskills.com', '');
+        } else {
+          activeName = currentUser.email.split('@')[0];
+        }
+      }
+    }
+    return getTimeGreeting(language, activeName);
   }, [currentTime, language, currentUser, userProfile.fullName]);
 
   const value = useMemo(

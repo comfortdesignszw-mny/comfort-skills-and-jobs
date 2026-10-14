@@ -28,7 +28,10 @@ export const HomeView: React.FC = () => {
     searchQuery, 
     setSearchQuery,
     currency,
-    translate 
+    translate,
+    greetingText,
+    currentUser,
+    setShowAuthModal
   } = useApp();
 
   const courses = StorageEngine.getCourses();
@@ -58,6 +61,28 @@ export const HomeView: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-24 max-w-7xl mx-auto px-4 sm:px-6 pt-4">
+      {/* Dynamic Time-of-Day Personalized Greeting Banner */}
+      <div className="bg-gradient-to-r from-teal-900 to-slate-900 rounded-3xl p-5 sm:p-6 text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <span className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-widest text-teal-300 block mb-1">
+            Comfort Skills &amp; Jobs Hub
+          </span>
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+            {greetingText}
+          </h2>
+          <p className="text-xs sm:text-sm text-teal-100/90 mt-1">
+            {translate('what_to_achieve')}
+          </p>
+        </div>
+        {!currentUser && (
+          <button
+            onClick={() => setShowAuthModal(true)}
+            className="self-start sm:self-auto px-4 py-2 bg-teal-400 hover:bg-teal-300 text-slate-950 font-bold text-xs rounded-xl transition shadow-xs whitespace-nowrap"
+          >
+            Sign In / Join Free
+          </button>
+        )}
+      </div>
       {/* Search Bar Card - Matching Screenshot 6 */}
       <form onSubmit={handleSearchSubmit} className="relative">
         <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 flex items-center gap-3 hover:border-teal-400 transition cursor-pointer">
