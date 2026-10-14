@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "Comfort Skills & Jobs Hub",
+  "short_name": "ComfortSkills",
+  "description": "Unified offline-first employment, practical skills, gig matching, and small business platform for Zimbabwe.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8fafc",
+  "theme_color": "#0d9488",
+  "categories": ["business", "education", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

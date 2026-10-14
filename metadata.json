@@ -1,0 +1,8 @@
+{
+  "name": "Comfort Skills & Jobs Hub",
+  "description": "Unified offline-first employment, practical skills development, gig matching, and small business management platform for Bulawayo and Zimbabwe.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

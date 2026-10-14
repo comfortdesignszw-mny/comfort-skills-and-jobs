@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="tealGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f766e"/>
+      <stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#fbbf24"/>
+    </linearGradient>
+  </defs>
+  <!-- Background squircle -->
+  <rect width="512" height="512" rx="128" fill="url(#tealGrad)"/>
+  <!-- Central Emblem: Graduation cap & tools & sun -->
+  <circle cx="256" cy="180" r="50" fill="url(#goldGrad)" opacity="0.9"/>
+  <!-- Cap / Hub diamond -->
+  <polygon points="256,120 370,175 256,230 142,175" fill="#ffffff"/>
+  <path d="M190,205 L190,270 Q256,310 322,270 L322,205" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round"/>
+  <!-- Briefcase & Store icon base -->
+  <rect x="160" y="295" width="192" height="120" rx="24" fill="#ffffff" opacity="0.95"/>
+  <rect x="206" y="270" width="100" height="30" rx="12" fill="none" stroke="#ffffff" stroke-width="14"/>
+  <line x1="160" y1="355" x2="352" y2="355" stroke="#0f766e" stroke-width="8"/>
+  <circle cx="256" cy="355" r="14" fill="url(#goldGrad)"/>
+</svg>

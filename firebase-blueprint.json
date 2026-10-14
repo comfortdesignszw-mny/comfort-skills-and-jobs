@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account information, skills, and contact details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 120 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "suburb": { "type": "string", "maxLength": 80 },
+        "city": { "type": "string", "maxLength": 50 },
+        "headline": { "type": "string", "maxLength": 150 },
+        "bio": { "type": "string", "maxLength": 500 },
+        "roles": { "type": "array" },
+        "skills": { "type": "array" },
+        "authProvider": { "type": "string", "maxLength": 30 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "fullName", "email"]
+    },
+    "JobVacancy": {
+      "title": "Job Vacancy",
+      "description": "Public verified job vacancy in Zimbabwe",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 120 },
+        "companyName": { "type": "string", "maxLength": 100 },
+        "location": { "type": "string", "maxLength": 100 },
+        "city": { "type": "string", "maxLength": 50 },
+        "type": { "type": "string" },
+        "industry": { "type": "string" },
+        "salaryText": { "type": "string" },
+        "description": { "type": "string", "maxLength": 2000 },
+        "postedBy": { "type": "string" },
+        "isVerifiedEmployer": { "type": "boolean" },
+        "postedDate": { "type": "string" }
+      },
+      "required": ["id", "title", "companyName", "location", "postedBy"]
+    },
+    "JobApplication": {
+      "title": "Job Application",
+      "description": "Candidate application to a vacancy",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "jobId": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "companyName": { "type": "string" },
+        "applicantId": { "type": "string" },
+        "applicantName": { "type": "string" },
+        "phone": { "type": "string" },
+        "coverNote": { "type": "string", "maxLength": 1000 },
+        "appliedDate": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "jobId", "applicantId", "applicantName"]
+    },
+    "GigRequest": {
+      "title": "Gig Request",
+      "description": "Local task or gig service request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 120 },
+        "category": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "suburb": { "type": "string" },
+        "budget": { "type": "string" },
+        "preferredDate": { "type": "string" },
+        "description": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string" },
+        "assignedWorkerId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "customerName", "suburb"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile document keyed by auth UID"
+    },
+    "/jobs/{jobId}": {
+      "schema": "JobVacancy",
+      "description": "Published job vacancies"
+    },
+    "/applications/{appId}": {
+      "schema": "JobApplication",
+      "description": "Candidate job applications"
+    },
+    "/gigs/{gigId}": {
+      "schema": "GigRequest",
+      "description": "Gig and task requests"
+    }
+  }
+}
