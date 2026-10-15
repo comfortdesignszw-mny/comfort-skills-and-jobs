@@ -395,54 +395,90 @@ export const BusinessView: React.FC = () => {
               <span>Amount &amp; Method</span>
             </div>
 
-            <div className="divide-y divide-slate-100">
-              {transactions.map((tx) => (
-                <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50 transition text-xs">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        tx.type === 'expense'
-                          ? 'bg-rose-100 text-rose-800'
-                          : tx.type === 'gig_payment'
-                          ? 'bg-indigo-100 text-indigo-800'
-                          : 'bg-emerald-100 text-emerald-800'
-                      }`}>
-                        {tx.type === 'expense' ? 'Expense' : tx.type === 'gig_payment' ? 'Gig Payment' : 'Sale'}
-                      </span>
-                      <span className="font-bold text-slate-900">{tx.category}</span>
-                      <span className="text-slate-400">· {tx.date}</span>
-                    </div>
-                    <p className="text-slate-600 font-medium">{tx.description}</p>
-                    {tx.customerOrSupplier && (
-                      <p className="text-[11px] text-slate-400">
-                        Entity: {tx.customerOrSupplier}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="text-right flex items-center gap-3">
-                    <div>
-                      <span className={`text-sm font-black tabular-nums ${
-                        tx.type === 'expense' ? 'text-rose-600' : 'text-emerald-700'
-                      }`}>
-                        {tx.type === 'expense' ? '-' : '+'}${tx.amount.toFixed(2)}
-                      </span>
-                      <span className="block text-[10px] text-slate-400 uppercase font-semibold">
-                        {tx.paymentMethod}
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={() => StorageEngine.deleteTransaction(tx.id)}
-                      className="p-1.5 text-slate-300 hover:text-rose-600 rounded transition"
-                      title="Delete record"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+            {transactions.length === 0 ? (
+              <div className="p-8 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center mx-auto">
+                  <Store className="w-6 h-6 text-teal-600" />
                 </div>
-              ))}
-            </div>
+                <div className="space-y-1 max-w-sm mx-auto">
+                  <h4 className="text-sm font-bold text-slate-900">No Transactions Recorded Yet</h4>
+                  <p className="text-xs text-slate-500">
+                    Your production cashbook is ready. Record your first sale, gig payment, or business expense below.
+                  </p>
+                </div>
+                <div className="flex items-center justify-center gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      setTxType('sale');
+                      setShowAddTxModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Record First Sale</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTxType('expense');
+                      setShowAddTxModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                    <span>Log Expense</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {transactions.map((tx) => (
+                  <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50 transition text-xs">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          tx.type === 'expense'
+                            ? 'bg-rose-100 text-rose-800'
+                            : tx.type === 'gig_payment'
+                            ? 'bg-indigo-100 text-indigo-800'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {tx.type === 'expense' ? 'Expense' : tx.type === 'gig_payment' ? 'Gig Payment' : 'Sale'}
+                        </span>
+                        <span className="font-bold text-slate-900">{tx.category}</span>
+                        <span className="text-slate-400">· {tx.date}</span>
+                      </div>
+                      <p className="text-slate-600 font-medium">{tx.description}</p>
+                      {tx.customerOrSupplier && (
+                        <p className="text-[11px] text-slate-400">
+                          Entity: {tx.customerOrSupplier}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="text-right flex items-center gap-3">
+                      <div>
+                        <span className={`text-sm font-black tabular-nums ${
+                          tx.type === 'expense' ? 'text-rose-600' : 'text-emerald-700'
+                        }`}>
+                          {tx.type === 'expense' ? '-' : '+'}${tx.amount.toFixed(2)}
+                        </span>
+                        <span className="block text-[10px] text-slate-400 uppercase font-semibold">
+                          {tx.paymentMethod}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => StorageEngine.deleteTransaction(tx.id)}
+                        className="p-1.5 text-slate-300 hover:text-rose-600 rounded transition"
+                        title="Delete record"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

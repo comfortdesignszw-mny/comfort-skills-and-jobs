@@ -213,6 +213,37 @@ export interface CustomerCredit {
   notes: string;
 }
 
+export interface CVExperience {
+  id: string;
+  jobTitle: string;
+  company: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+  responsibilities: string;
+}
+
+export interface CVEducation {
+  id: string;
+  qualification: string;
+  institution: string;
+  yearCompleted: string;
+  gradeOrDistinction?: string;
+}
+
+export interface CVReference {
+  id: string;
+  name: string;
+  jobTitle: string;
+  company: string;
+  phone: string;
+  email?: string;
+  relationship: string;
+}
+
+export type CVTemplateId = 'modern_teal' | 'executive_navy' | 'clean_minimal' | 'technical_slate' | 'bold_compact';
+
 export interface UserProfile {
   id: string;
   fullName: string;
@@ -231,6 +262,14 @@ export interface UserProfile {
   isWorkerProfileActive: boolean;
   workerTrade?: string;
   workerRate?: string;
+  // Extended Professional CV Fields
+  cvTemplate?: CVTemplateId;
+  driverLicense?: string;
+  languages?: string[];
+  structuredExperiences?: CVExperience[];
+  structuredEducations?: CVEducation[];
+  structuredReferences?: CVReference[];
+  customCertifications?: string[];
 }
 
 export interface SyncQueueItem {

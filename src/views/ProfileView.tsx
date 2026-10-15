@@ -21,13 +21,62 @@ import {
   Camera,
   Upload,
   Trash2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Plus,
+  Printer,
+  Sparkles,
+  Layout,
+  Car,
+  Languages,
+  Check,
+  Eye
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { StorageEngine } from '../db/storage';
-import { UserProfile } from '../types';
+import { UserProfile, CVTemplateId, CVExperience, CVEducation, CVReference } from '../types';
 import { saveUserProfileToFirestore } from '../firebase';
 import { compressImageFile } from '../utils/imageCompression';
+import { CVRenderer } from '../components/CVRenderer';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+
+const TEMPLATE_OPTIONS: Array<{ id: CVTemplateId; label: string; description: string; badge: string; color: string }> = [
+  {
+    id: 'modern_teal',
+    label: 'Modern Teal',
+    description: 'Fresh 2-column layout with sidebar and prominent skill badges.',
+    badge: 'Popular',
+    color: 'from-teal-600 to-teal-800'
+  },
+  {
+    id: 'executive_navy',
+    label: 'Executive Navy',
+    description: 'Corporate serif style ideal for supervisors, managers, and contractors.',
+    badge: 'Formal',
+    color: 'from-slate-800 to-slate-950'
+  },
+  {
+    id: 'clean_minimal',
+    label: 'Clean Minimal',
+    description: 'High-whitespace design focusing purely on experience and clarity.',
+    badge: 'Simple',
+    color: 'from-slate-600 to-slate-800'
+  },
+  {
+    id: 'technical_slate',
+    label: 'Technical Slate',
+    description: 'Engineering & trades design with safety and licensing blocks.',
+    badge: 'Artisan',
+    color: 'from-cyan-700 to-slate-900'
+  },
+  {
+    id: 'bold_compact',
+    label: 'Bold Compact',
+    description: 'Single-page high-density emerald design for maximum impact.',
+    badge: 'High Impact',
+    color: 'from-emerald-700 to-emerald-950'
+  }
+];
 
 export const ProfileView: React.FC = () => {
   const { 
@@ -51,14 +100,203 @@ export const ProfileView: React.FC = () => {
 
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<UserProfile>(userProfile);
+  const [selectedTemplate, setSelectedTemplate] = useState<CVTemplateId>(userProfile.cvTemplate || 'modern_teal');
+  const [activeCVTab, setActiveCVTab] = useState<'preview' | 'templates' | 'builder'>('preview');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateUserProfile(formData);
+  // New Skill Input state
+  const [newSkillInput, setNewSkillInput] = useState('');
+  const [newLanguageInput, setNewLanguageInput] = useState('');
+
+  // Experience Sub-Form state
+  const [expTitle, setExpTitle] = useState('');
+  const [expCompany, setExpCompany] = useState('');
+  const [expLocation, setExpLocation] = useState('Bulawayo');
+  const [expStart, setExpStart] = useState('2023');
+  const [expEnd, setExpEnd] = useState('Present');
+  const [expCurrent, setExpCurrent] = useState(true);
+  const [expResp, setExpResp] = useState('');
+
+  // Education Sub-Form state
+  const [eduQual, setEduQual] = useState('');
+  const [eduInst, setEduInst] = useState('');
+  const [eduYear, setEduYear] = useState('2024');
+
+  // Reference Sub-Form state
+  const [refName, setRefName] = useState('');
+  const [refTitle, setRefTitle] = useState('');
+  const [refCompany, setRefCompany] = useState('');
+  const [refPhone, setRefPhone] = useState('+263 7');
+
+  const handleSaveProfile = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const updated: UserProfile = {
+      ...formData,
+      cvTemplate: selectedTemplate
+    };
+    updateUserProfile(updated);
     if (currentUser) {
-      saveUserProfileToFirestore(currentUser.uid, formData);
+      saveUserProfileToFirestore(currentUser.uid, updated);
     }
     setIsEditing(false);
+    showToast('Professional CV Profile successfully saved!');
+  };
+
+  const handleSelectTemplate = (templateId: CVTemplateId) => {
+    setSelectedTemplate(templateId);
+    setFormData((prev) => ({ ...prev, cvTemplate: templateId }));
+    const updated = { ...userProfile, cvTemplate: templateId };
+    updateUserProfile(updated);
+    if (currentUser) {
+      saveUserProfileToFirestore(currentUser.uid, updated);
+    }
+    showToast(`Applied ${TEMPLATE_OPTIONS.find((t) => t.id === templateId)?.label} template.`);
+  };
+
+  const handleAddExperience = () => {
+    if (!expTitle.trim() || !expCompany.trim()) {
+      showToast('Please enter Job Title and Company.');
+      return;
+    }
+    const newExp: CVExperience = {
+      id: `exp-${Date.now()}`,
+      jobTitle: expTitle.trim(),
+      company: expCompany.trim(),
+      location: expLocation.trim(),
+      startDate: expStart.trim(),
+      endDate: expCurrent ? 'Present' : expEnd.trim(),
+      isCurrent: expCurrent,
+      responsibilities: expResp.trim()
+    };
+    const nextList = [...(formData.structuredExperiences || []), newExp];
+    setFormData((prev) => ({ ...prev, structuredExperiences: nextList }));
+    setExpTitle('');
+    setExpCompany('');
+    setExpResp('');
+    showToast('Experience added to CV.');
+  };
+
+  const handleDeleteExperience = (id: string) => {
+    const nextList = (formData.structuredExperiences || []).filter((e) => e.id !== id);
+    setFormData((prev) => ({ ...prev, structuredExperiences: nextList }));
+  };
+
+  const handleAddEducation = () => {
+    if (!eduQual.trim() || !eduInst.trim()) {
+      showToast('Please enter Qualification and Institution.');
+      return;
+    }
+    const newEdu: CVEducation = {
+      id: `edu-${Date.now()}`,
+      qualification: eduQual.trim(),
+      institution: eduInst.trim(),
+      yearCompleted: eduYear.trim()
+    };
+    const nextList = [...(formData.structuredEducations || []), newEdu];
+    setFormData((prev) => ({ ...prev, structuredEducations: nextList }));
+    setEduQual('');
+    setEduInst('');
+    showToast('Education record added.');
+  };
+
+  const handleDeleteEducation = (id: string) => {
+    const nextList = (formData.structuredEducations || []).filter((e) => e.id !== id);
+    setFormData((prev) => ({ ...prev, structuredEducations: nextList }));
+  };
+
+  const handleAddReference = () => {
+    if (!refName.trim() || !refPhone.trim()) {
+      showToast('Please enter Reference Name and Phone.');
+      return;
+    }
+    const newRef: CVReference = {
+      id: `ref-${Date.now()}`,
+      name: refName.trim(),
+      jobTitle: refTitle.trim() || 'Work Supervisor',
+      company: refCompany.trim() || 'Verified Employer',
+      phone: refPhone.trim(),
+      relationship: 'Professional Contact'
+    };
+    const nextList = [...(formData.structuredReferences || []), newRef];
+    setFormData((prev) => ({ ...prev, structuredReferences: nextList }));
+    setRefName('');
+    setRefTitle('');
+    setRefCompany('');
+    setRefPhone('+263 7');
+    showToast('Reference added.');
+  };
+
+  const handleDeleteReference = (id: string) => {
+    const nextList = (formData.structuredReferences || []).filter((r) => r.id !== id);
+    setFormData((prev) => ({ ...prev, structuredReferences: nextList }));
+  };
+
+  const handleAddSkillTag = () => {
+    if (!newSkillInput.trim() || formData.skills.includes(newSkillInput.trim())) return;
+    setFormData((prev) => ({ ...prev, skills: [...prev.skills, newSkillInput.trim()] }));
+    setNewSkillInput('');
+  };
+
+  const handleRemoveSkill = (skill: string) => {
+    setFormData((prev) => ({ ...prev, skills: prev.skills.filter((s) => s !== skill) }));
+  };
+
+  const handleAddLanguageTag = () => {
+    if (!newLanguageInput.trim()) return;
+    const current = formData.languages || ['English', 'isiNdebele'];
+    if (current.includes(newLanguageInput.trim())) return;
+    setFormData((prev) => ({ ...prev, languages: [...current, newLanguageInput.trim()] }));
+    setNewLanguageInput('');
+  };
+
+  const handleRemoveLanguage = (lang: string) => {
+    const current = formData.languages || ['English', 'isiNdebele'];
+    setFormData((prev) => ({ ...prev, languages: current.filter((l) => l !== lang) }));
+  };
+
+  /**
+   * PDF Generation and Export
+   * Uses html2canvas to render the selected template into high-res canvas, then jsPDF to download.
+   */
+  const handleExportPDF = async () => {
+    const docElement = document.getElementById('cv-print-document');
+    if (!docElement) {
+      window.print();
+      return;
+    }
+
+    try {
+      setIsGeneratingPdf(true);
+      showToast('Rendering high-resolution CV PDF...');
+
+      const canvas = await html2canvas(docElement, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      const cleanName = (userProfile.fullName || 'Professional_CV').replace(/\s+/g, '_');
+      pdf.save(`${cleanName}_CV.pdf`);
+      showToast('CV PDF successfully downloaded!');
+    } catch (err) {
+      console.error('PDF export error:', err);
+      // Fallback to browser print dialog which supports Save as PDF
+      window.print();
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const toggleRole = (role: 'learner' | 'jobseeker' | 'worker' | 'employer' | 'business_owner') => {
@@ -76,11 +314,6 @@ export const ProfileView: React.FC = () => {
     setFormData((prev) => ({ ...prev, roles: nextRoles }));
   };
 
-  const handleAddSkill = (skill: string) => {
-    if (!skill.trim() || formData.skills.includes(skill.trim())) return;
-    setFormData((prev) => ({ ...prev, skills: [...prev.skills, skill.trim()] }));
-  };
-
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 pb-24 space-y-6">
       {/* Top Navigation & Back to Home */}
@@ -92,7 +325,7 @@ export const ProfileView: React.FC = () => {
           <ChevronLeft className="w-4 h-4" /> Back to Home
         </button>
         <span className="text-xs font-semibold text-slate-500">
-          Account &amp; CV Profile
+          Professional CV Studio &amp; Account
         </span>
       </div>
 
@@ -119,7 +352,7 @@ export const ProfileView: React.FC = () => {
         </div>
       )}
 
-      {/* Profile Card */}
+      {/* User Header Profile Card */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs relative">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="flex items-start gap-4">
@@ -139,87 +372,64 @@ export const ProfileView: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-black text-slate-900">
-                  {userProfile.fullName || 'Comfort Nyoni'}
+                  {userProfile.fullName || 'Comfort Member'}
                 </h2>
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                {userProfile.headline || 'Vocational Technician & SME Trader'}
+                {userProfile.headline || 'Vocational Technician & Tradesperson'}
               </p>
               <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mt-2">
                 <span className="flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                  {userProfile.suburb}, {userProfile.city}
+                  {userProfile.suburb || 'Bulawayo CBD'}, {userProfile.city || 'Bulawayo'}
                 </span>
                 <span>·</span>
                 <span className="flex items-center gap-1 font-mono">
                   <Phone className="w-3.5 h-3.5 text-slate-400" />
-                  {userProfile.phone}
+                  {userProfile.phone || '+263 77 234 5678'}
                 </span>
               </div>
             </div>
           </div>
 
-          <button
-            onClick={() => {
-              if (isEditing) {
-                updateUserProfile(formData);
-                setIsEditing(false);
-              } else {
-                setFormData(userProfile);
-                setIsEditing(true);
-              }
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition self-start"
-          >
-            {isEditing ? (
-              <>
-                <Save className="w-3.5 h-3.5 text-teal-600" />
-                <span>Save Changes</span>
-              </>
-            ) : (
-              <>
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Edit CV Profile</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Online Firebase Account Status */}
-        <div className="mt-4 p-3 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div>
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-              Online Cloud Synchronization
-            </span>
-            {currentUser ? (
-              <p className="font-semibold text-slate-800 mt-0.5">
-                Connected: <span className="text-teal-700">{currentUser.email || currentUser.displayName}</span>
-              </p>
-            ) : (
-              <p className="text-slate-600 mt-0.5">
-                Operating locally. Sign in to sync across devices with Google, Phone or Email.
-              </p>
-            )}
+          <div className="flex items-center gap-2 self-start">
+            <button
+              onClick={() => {
+                if (isEditing) {
+                  handleSaveProfile();
+                } else {
+                  setFormData(userProfile);
+                  setIsEditing(true);
+                }
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 shadow-2xs transition"
+            >
+              {isEditing ? (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save CV Profile</span>
+                </>
+              ) : (
+                <>
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Edit CV Details</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleExportPDF}
+              disabled={isGeneratingPdf}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-2xs transition"
+              title="Download PDF or Print"
+            >
+              <Download className="w-3.5 h-3.5 text-teal-700" />
+              <span>{isGeneratingPdf ? 'Generating...' : 'Print / Save PDF'}</span>
+            </button>
           </div>
-          {currentUser ? (
-            <button
-              onClick={signOutUser}
-              className="px-3 py-1.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-100 transition self-start sm:self-auto"
-            >
-              Sign Out
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowAuthModal(true)}
-              className="px-3 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition self-start sm:self-auto shadow-2xs"
-            >
-              Sign In / Register
-            </button>
-          )}
         </div>
 
-        {/* Roles Badges (Multi-role support per brief) */}
+        {/* Roles Badges */}
         <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
           <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
             Active Multi-Role Permissions (Tap to toggle)
@@ -251,250 +461,655 @@ export const ProfileView: React.FC = () => {
         </div>
       </div>
 
-      {/* Edit Form or Read-Only CV Profile */}
-      {isEditing ? (
-        <form onSubmit={handleSaveProfile} className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4 text-xs">
-          <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">
-            Update CV &amp; Personal Details
-          </h3>
-
-          {/* Compressed Profile Image Upload */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-center gap-4">
-            <div className="relative shrink-0">
-              {formData.avatarUrl ? (
-                <img
-                  src={formData.avatarUrl}
-                  alt="Profile preview"
-                  className="w-16 h-16 rounded-2xl object-cover border border-slate-300 shadow-2xs"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xl">
-                  {formData.fullName ? formData.fullName.charAt(0) : 'U'}
-                </div>
-              )}
-            </div>
-            <div className="flex-1 space-y-1 text-center sm:text-left">
-              <span className="block font-bold text-slate-800 text-xs">Profile Photo / Passport Portrait</span>
-              <p className="text-[11px] text-slate-500">
-                Auto-compressed to web standard (&lt;100KB) to conserve mobile data while syncing.
-              </p>
-              <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
-                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer font-bold text-xs shadow-2xs transition">
-                  <Camera className="w-3.5 h-3.5 text-teal-600" />
-                  <span>Choose Photo</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      try {
-                        const compressed = await compressImageFile(file, { maxWidth: 500, maxHeight: 500, quality: 0.8 });
-                        setFormData((prev) => ({ ...prev, avatarUrl: compressed }));
-                        showToast('Profile image uploaded and compressed.');
-                      } catch {
-                        showToast('Could not process image.');
-                      }
-                    }}
-                  />
-                </label>
-                {formData.avatarUrl && (
-                  <button
-                    type="button"
-                    onClick={() => setFormData((prev) => ({ ...prev, avatarUrl: '' }))}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-rose-600 hover:bg-rose-50 text-xs font-semibold"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> Remove
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Full Name</label>
-              <input
-                type="text"
-                value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
-              />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Headline</label>
-              <input
-                type="text"
-                value={formData.headline}
-                onChange={(e) => setFormData({ ...formData, headline: e.target.value })}
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
-              />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Phone Number (WhatsApp / EcoCash)</label>
-              <input
-                type="text"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
-              />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Email</label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
-              />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Suburb</label>
-              <input
-                type="text"
-                value={formData.suburb}
-                onChange={(e) => setFormData({ ...formData, suburb: e.target.value })}
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
-              />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">City</label>
-              <input
-                type="text"
-                value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">Bio &amp; Objective</label>
-            <textarea
-              rows={2}
-              value={formData.bio}
-              onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
-            />
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">Education &amp; Training</label>
-            <input
-              type="text"
-              value={formData.education}
-              onChange={(e) => setFormData({ ...formData, education: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
-            />
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">Work Experience</label>
-            <textarea
-              rows={2}
-              value={formData.workExperience}
-              onChange={(e) => setFormData({ ...formData, workExperience: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
-            />
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">Traceable References</label>
-            <input
-              type="text"
-              value={formData.references}
-              onChange={(e) => setFormData({ ...formData, references: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
-            />
-          </div>
-
-          <div className="flex gap-2 pt-2">
+      {/* ================= CV TEMPLATE & VIEW TABS ================= */}
+      <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
             <button
-              type="button"
-              onClick={() => setIsEditing(false)}
-              className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold"
+              onClick={() => setActiveCVTab('preview')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                activeCVTab === 'preview'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
             >
-              Cancel
+              <Eye className="w-3.5 h-3.5" />
+              <span>Live CV Preview</span>
             </button>
             <button
-              type="submit"
-              className="flex-1 py-2.5 rounded-xl bg-teal-600 text-white font-bold hover:bg-teal-700"
+              onClick={() => setActiveCVTab('templates')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                activeCVTab === 'templates'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
             >
-              Save CV Profile
+              <Layout className="w-3.5 h-3.5" />
+              <span>5 Professional Templates</span>
+            </button>
+            <button
+              onClick={() => {
+                setActiveCVTab('builder');
+                setIsEditing(true);
+              }}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                activeCVTab === 'builder' || isEditing
+                  ? 'bg-teal-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Explicit CV Builder</span>
             </button>
           </div>
-        </form>
-      ) : (
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-5 text-xs">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 className="text-sm font-bold text-slate-900">
-              Curriculum Vitae (CV) &amp; Professional Summary
-            </h3>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportPDF}
+              disabled={isGeneratingPdf}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-xs transition"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export PDF</span>
+            </button>
             <button
               onClick={() => window.print()}
-              className="flex items-center gap-1 text-teal-700 font-bold hover:underline"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs transition"
             >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Print / Save CV PDF</span>
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print</span>
             </button>
           </div>
+        </div>
 
+        {/* ================= TAB 1: 5 TEMPLATES SELECTION ================= */}
+        {activeCVTab === 'templates' && (
           <div className="space-y-4">
-            <div>
-              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
-                Professional Bio
-              </span>
-              <p className="text-slate-700 mt-1 leading-relaxed">
-                {userProfile.bio || 'Vocational artisan and small business owner operating in Bulawayo.'}
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-slate-900">Choose from 5 Industry-Standard CV Templates</h3>
+              <p className="text-xs text-slate-500">
+                Select your preferred visual structure. All your professional details, certificates, and work experiences adapt instantly.
               </p>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {TEMPLATE_OPTIONS.map((tmpl) => {
+                const isSelected = selectedTemplate === tmpl.id;
+                return (
+                  <div
+                    key={tmpl.id}
+                    onClick={() => handleSelectTemplate(tmpl.id)}
+                    className={`p-4 rounded-2xl border-2 transition cursor-pointer flex flex-col justify-between ${
+                      isSelected
+                        ? 'border-teal-600 bg-teal-50/40 shadow-xs'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className={`h-3 w-8 rounded-full bg-gradient-to-r ${tmpl.color}`}></span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                          {tmpl.badge}
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-900">{tmpl.label}</h4>
+                      <p className="text-xs text-slate-500 leading-relaxed">{tmpl.description}</p>
+                    </div>
+
+                    <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-xs font-bold text-teal-700">
+                        {isSelected ? 'Active Template ✓' : 'Select Template'}
+                      </span>
+                      {isSelected && <Check className="w-4 h-4 text-teal-600" />}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ================= TAB 2: EXPLICIT CV BUILDER & FORM ================= */}
+        {(activeCVTab === 'builder' || isEditing) && (
+          <form onSubmit={handleSaveProfile} className="space-y-5 text-xs">
+            {/* Header info */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Standard Professional CV Fields</h3>
+                <p className="text-xs text-slate-500">Add, edit, and organize all formal CV sections for Zimbabwean and regional employers.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditing(false);
+                  setActiveCVTab('preview');
+                }}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800"
+              >
+                Close Editor
+              </button>
+            </div>
+
+            {/* Profile Photo / Compressed Upload */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-center gap-4">
+              <div className="relative shrink-0">
+                {formData.avatarUrl ? (
+                  <img
+                    src={formData.avatarUrl}
+                    alt="Profile preview"
+                    className="w-16 h-16 rounded-2xl object-cover border border-slate-300 shadow-2xs"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xl">
+                    {formData.fullName ? formData.fullName.charAt(0) : 'U'}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 space-y-1 text-center sm:text-left">
+                <span className="block font-bold text-slate-800 text-xs">Profile Photo / Passport Portrait</span>
+                <p className="text-[11px] text-slate-500">
+                  Auto-compressed to web standard (&lt;100KB) to conserve mobile data while syncing.
+                </p>
+                <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer font-bold text-xs shadow-2xs transition">
+                    <Camera className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Choose Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const compressed = await compressImageFile(file, { maxWidth: 500, maxHeight: 500, quality: 0.8 });
+                          setFormData((prev) => ({ ...prev, avatarUrl: compressed }));
+                          showToast('Profile image uploaded and compressed.');
+                        } catch {
+                          showToast('Could not process image.');
+                        }
+                      }}
+                    />
+                  </label>
+                  {formData.avatarUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, avatarUrl: '' }))}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-rose-600 hover:bg-rose-50 text-xs font-semibold"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Core Personal Details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Full Name (As on ID)</label>
+                <input
+                  type="text"
+                  value={formData.fullName}
+                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
+                  placeholder="e.g. Comfort Nyoni"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Professional Title / Headline</label>
+                <input
+                  type="text"
+                  value={formData.headline}
+                  onChange={(e) => setFormData({ ...formData, headline: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
+                  placeholder="e.g. Certified Electrician & Solar Installer"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Phone Number (WhatsApp / Calls)</label>
+                <input
+                  type="text"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
+                  placeholder="+263 77 234 5678"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Email Address</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
+                  placeholder="name@comfortskills.com"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Suburb / Residential Area</label>
+                <input
+                  type="text"
+                  value={formData.suburb}
+                  onChange={(e) => setFormData({ ...formData, suburb: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
+                  placeholder="e.g. Nkulumane 12, Morningside"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">City</label>
+                <input
+                  type="text"
+                  value={formData.city}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
+                  placeholder="Bulawayo"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Driver’s License (Optional)</label>
+                <input
+                  type="text"
+                  value={formData.driverLicense || ''}
+                  onChange={(e) => setFormData({ ...formData, driverLicense: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
+                  placeholder="e.g. Class 2 & 4 (Clean)"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Preferred CV Template</label>
+                <select
+                  value={selectedTemplate}
+                  onChange={(e) => handleSelectTemplate(e.target.value as CVTemplateId)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs bg-white font-medium"
+                >
+                  {TEMPLATE_OPTIONS.map((t) => (
+                    <option key={t.id} value={t.id}>{t.label} ({t.badge})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Professional Summary / Bio */}
             <div>
-              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
-                Acquired Skills &amp; Competencies
-              </span>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {userProfile.skills.map((skill, idx) => (
+              <label className="block font-bold text-slate-700 mb-1">Professional Summary / Career Objective</label>
+              <textarea
+                rows={3}
+                value={formData.bio}
+                onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs leading-relaxed"
+                placeholder="Write a concise 3-4 sentence overview of your vocational experience, punctuality, and work ethic."
+              />
+            </div>
+
+            {/* Skills Tags Section */}
+            <div className="space-y-2">
+              <label className="block font-bold text-slate-700">Technical &amp; Vocational Skills</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newSkillInput}
+                  onChange={(e) => setNewSkillInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddSkillTag();
+                    }
+                  }}
+                  className="flex-1 p-2 rounded-xl border border-slate-200 text-xs"
+                  placeholder="Add skill (e.g. Solar Inverter Setup, Arc Welding, QuickBooks)..."
+                />
+                <button
+                  type="button"
+                  onClick={handleAddSkillTag}
+                  className="px-3 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {formData.skills.map((s, idx) => (
                   <span
                     key={idx}
-                    className="px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 font-semibold border border-teal-100 text-xs"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-50 text-teal-900 border border-teal-200 text-xs font-semibold"
                   >
-                    {skill}
+                    <span>{s}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSkill(s)}
+                      className="text-slate-400 hover:text-rose-600"
+                    >
+                      ×
+                    </button>
                   </span>
                 ))}
               </div>
             </div>
 
-            <div>
-              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
-                Education
-              </span>
-              <p className="text-slate-800 font-medium mt-1">
-                {userProfile.education}
-              </p>
+            {/* Languages Section */}
+            <div className="space-y-2">
+              <label className="block font-bold text-slate-700">Languages Spoken</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newLanguageInput}
+                  onChange={(e) => setNewLanguageInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddLanguageTag();
+                    }
+                  }}
+                  className="flex-1 p-2 rounded-xl border border-slate-200 text-xs"
+                  placeholder="Add language (e.g. English - Fluent, isiNdebele - Native, chiShona - Conversational)..."
+                />
+                <button
+                  type="button"
+                  onClick={handleAddLanguageTag}
+                  className="px-3 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {(formData.languages || ['English (Fluent)', 'isiNdebele (Fluent)', 'chiShona (Working)']).map((lang, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold"
+                  >
+                    <span>{lang}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveLanguage(lang)}
+                      className="text-slate-400 hover:text-rose-600"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
             </div>
 
-            <div>
-              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
-                Work Experience
+            {/* Work & Trade Experiences (Structured) */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              <span className="block font-bold text-slate-900 text-xs">
+                Work &amp; Trade Experience History
               </span>
-              <p className="text-slate-700 mt-1 leading-relaxed">
-                {userProfile.workExperience}
-              </p>
+
+              {/* Existing items list */}
+              <div className="space-y-2">
+                {(formData.structuredExperiences || []).map((exp) => (
+                  <div key={exp.id} className="p-3 bg-white rounded-xl border border-slate-200 flex items-start justify-between gap-3 text-xs">
+                    <div>
+                      <p className="font-bold text-slate-900">{exp.jobTitle} · <span className="text-teal-700">{exp.company}</span></p>
+                      <p className="text-[11px] text-slate-500">{exp.startDate} – {exp.endDate} · {exp.location}</p>
+                      <p className="text-slate-600 mt-1 whitespace-pre-line text-[11px]">{exp.responsibilities}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteExperience(exp.id)}
+                      className="text-slate-300 hover:text-rose-600 p-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add Experience Subform */}
+              <div className="pt-2 border-t border-slate-200/60 space-y-2">
+                <span className="text-[11px] font-bold text-slate-700 block">+ Add New Employment / Field Contract</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={expTitle}
+                    onChange={(e) => setExpTitle(e.target.value)}
+                    placeholder="Job Title (e.g. Lead Welder, Maintenance Tech)"
+                    className="p-2 rounded-lg border border-slate-200 text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={expCompany}
+                    onChange={(e) => setExpCompany(e.target.value)}
+                    placeholder="Company or Employer (e.g. Belmont Steel Works)"
+                    className="p-2 rounded-lg border border-slate-200 text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={expLocation}
+                    onChange={(e) => setExpLocation(e.target.value)}
+                    placeholder="Location (e.g. Bulawayo)"
+                    className="p-2 rounded-lg border border-slate-200 text-xs"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={expStart}
+                      onChange={(e) => setExpStart(e.target.value)}
+                      placeholder="Start (2022)"
+                      className="w-1/2 p-2 rounded-lg border border-slate-200 text-xs"
+                    />
+                    <input
+                      type="text"
+                      value={expCurrent ? 'Present' : expEnd}
+                      disabled={expCurrent}
+                      onChange={(e) => setExpEnd(e.target.value)}
+                      placeholder="End (2024)"
+                      className="w-1/2 p-2 rounded-lg border border-slate-200 text-xs disabled:bg-slate-100"
+                    />
+                  </div>
+                </div>
+                <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={expCurrent}
+                    onChange={(e) => setExpCurrent(e.target.checked)}
+                    className="rounded text-teal-600"
+                  />
+                  <span>I currently work in this position</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={expResp}
+                  onChange={(e) => setExpResp(e.target.value)}
+                  placeholder="Key responsibilities and achievements (e.g. Installed over 40 solar geysers with zero fault reports)..."
+                  className="w-full p-2 rounded-lg border border-slate-200 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddExperience}
+                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold text-xs"
+                >
+                  Add Experience Record
+                </button>
+              </div>
             </div>
 
-            <div>
-              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+            {/* Education & Vocational Qualifications (Structured) */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              <span className="block font-bold text-slate-900 text-xs">
+                Education &amp; Qualifications
+              </span>
+
+              <div className="space-y-2">
+                {(formData.structuredEducations || []).map((edu) => (
+                  <div key={edu.id} className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
+                    <div>
+                      <p className="font-bold text-slate-900">{edu.qualification}</p>
+                      <p className="text-[11px] text-slate-500">{edu.institution} · {edu.yearCompleted}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteEducation(edu.id)}
+                      className="text-slate-300 hover:text-rose-600 p-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-2 border-t border-slate-200/60 space-y-2">
+                <span className="text-[11px] font-bold text-slate-700 block">+ Add Qualification / Certificate</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    value={eduQual}
+                    onChange={(e) => setEduQual(e.target.value)}
+                    placeholder="Qualification (e.g. National Certificate in Electrical)"
+                    className="p-2 rounded-lg border border-slate-200 text-xs sm:col-span-1"
+                  />
+                  <input
+                    type="text"
+                    value={eduInst}
+                    onChange={(e) => setEduInst(e.target.value)}
+                    placeholder="Institution (e.g. Bulawayo Polytechnic)"
+                    className="p-2 rounded-lg border border-slate-200 text-xs sm:col-span-1"
+                  />
+                  <input
+                    type="text"
+                    value={eduYear}
+                    onChange={(e) => setEduYear(e.target.value)}
+                    placeholder="Year (e.g. 2024)"
+                    className="p-2 rounded-lg border border-slate-200 text-xs sm:col-span-1"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddEducation}
+                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold text-xs"
+                >
+                  Add Education Record
+                </button>
+              </div>
+            </div>
+
+            {/* Traceable References (Structured) */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              <span className="block font-bold text-slate-900 text-xs">
                 Traceable References
               </span>
-              <p className="text-slate-700 mt-1">
-                {userProfile.references}
-              </p>
+
+              <div className="space-y-2">
+                {(formData.structuredReferences || []).map((ref) => (
+                  <div key={ref.id} className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
+                    <div>
+                      <p className="font-bold text-slate-900">{ref.name} – <span className="text-teal-700">{ref.jobTitle}</span></p>
+                      <p className="text-[11px] text-slate-500">{ref.company} · {ref.phone}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteReference(ref.id)}
+                      className="text-slate-300 hover:text-rose-600 p-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-2 border-t border-slate-200/60 space-y-2">
+                <span className="text-[11px] font-bold text-slate-700 block">+ Add Reference Contact</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={refName}
+                    onChange={(e) => setRefName(e.target.value)}
+                    placeholder="Contact Name (e.g. Eng. T. Moyo)"
+                    className="p-2 rounded-lg border border-slate-200 text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={refTitle}
+                    onChange={(e) => setRefTitle(e.target.value)}
+                    placeholder="Designation (e.g. Site Supervisor)"
+                    className="p-2 rounded-lg border border-slate-200 text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={refCompany}
+                    onChange={(e) => setRefCompany(e.target.value)}
+                    placeholder="Company (e.g. Kelvin Engineering)"
+                    className="p-2 rounded-lg border border-slate-200 text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={refPhone}
+                    onChange={(e) => setRefPhone(e.target.value)}
+                    placeholder="Phone Number (+263 77 111 2222)"
+                    className="p-2 rounded-lg border border-slate-200 text-xs"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddReference}
+                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold text-xs"
+                >
+                  Add Reference Record
+                </button>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditing(false);
+                  setActiveCVTab('preview');
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-2.5 rounded-xl bg-teal-600 text-white font-bold hover:bg-teal-700 shadow-2xs"
+              >
+                Save &amp; Update CV
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* ================= TAB 3: LIVE PREVIEW & RENDERER ================= */}
+        {activeCVTab === 'preview' && !isEditing && (
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <span className="font-semibold text-slate-700">
+                Template in use: <strong className="text-teal-700 uppercase">{TEMPLATE_OPTIONS.find((t) => t.id === selectedTemplate)?.label}</strong>
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveCVTab('templates')}
+                  className="text-teal-700 font-bold hover:underline"
+                >
+                  Change Template
+                </button>
+                <span>·</span>
+                <button
+                  onClick={() => {
+                    setIsEditing(true);
+                    setActiveCVTab('builder');
+                  }}
+                  className="text-teal-700 font-bold hover:underline"
+                >
+                  Edit Details
+                </button>
+              </div>
+            </div>
+
+            {/* The Live Rendered Document */}
+            <div className="p-2 sm:p-4 bg-slate-100 rounded-3xl overflow-x-auto border border-slate-200">
+              <CVRenderer
+                profile={userProfile}
+                certificates={certificates}
+                template={selectedTemplate}
+              />
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Earned Certificates from Skills Academy */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
@@ -504,7 +1119,7 @@ export const ProfileView: React.FC = () => {
               Locally Issued Certificates ({certificates.length})
             </h3>
             <p className="text-xs text-slate-500">
-              Verified records stored in your phone memory
+              Verified records automatically embedded into your printed CV
             </p>
           </div>
           <Award className="w-5 h-5 text-teal-600" />

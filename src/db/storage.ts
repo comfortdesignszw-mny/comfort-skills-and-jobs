@@ -23,14 +23,14 @@ import {
 } from './initialData';
 
 const PUBLIC_STORAGE_KEYS = {
-  COURSES: 'comfort_hub_courses_v2',
-  JOBS: 'comfort_hub_jobs_v2',
-  WORKERS: 'comfort_hub_workers_v2',
-  GIG_REQUESTS: 'comfort_hub_gig_requests_v2',
+  COURSES: 'comfort_hub_courses_v3',
+  JOBS: 'comfort_hub_jobs_v3',
+  WORKERS: 'comfort_hub_workers_v3',
+  GIG_REQUESTS: 'comfort_hub_gig_requests_v3',
   FORCE_OFFLINE: 'comfort_hub_force_offline_mode',
   CURRENCY: 'comfort_hub_preferred_currency',
   LANGUAGE: 'comfort_hub_preferred_lang',
-  APP_INITIALIZED: 'comfort_hub_is_initialized_v2',
+  APP_INITIALIZED: 'comfort_hub_is_initialized_v3',
   ACTIVE_USER_ID: 'comfort_hub_active_user_id'
 };
 
@@ -94,27 +94,9 @@ export const StorageEngine = {
     if (!localStorage.getItem(PUBLIC_STORAGE_KEYS.APP_INITIALIZED)) {
       localStorage.setItem(PUBLIC_STORAGE_KEYS.COURSES, JSON.stringify(INITIAL_COURSES));
       localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify(INITIAL_JOBS));
-      localStorage.setItem(PUBLIC_STORAGE_KEYS.WORKERS, JSON.stringify(INITIAL_GIG_WORKERS));
-      localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify([
-        {
-          id: 'req-sample-1',
-          title: 'Fix tripping breaker and install solar inverter switch',
-          category: 'Plumbing & electrical work',
-          customerName: 'Gogo Sibanda',
-          customerPhone: '+263 71 223 9988',
-          suburb: 'Morningside, Bulawayo',
-          budget: '$30 - $40',
-          preferredDate: 'Tomorrow',
-          description: 'Our kitchen lights trip whenever the geyser switches on. Need an electrician to inspect circuit breaker.',
-          status: 'accepted',
-          assignedWorkerId: 'worker-1',
-          assignedWorkerName: 'Sipho Moyo',
-          quotedAmount: 35,
-          quotedCurrency: 'USD',
-          createdAt: '2026-10-14',
-          syncStatus: 'synced'
-        }
-      ]));
+      // Production ready: Start with zero seeded artisans and zero seeded gigs
+      localStorage.setItem(PUBLIC_STORAGE_KEYS.WORKERS, JSON.stringify([]));
+      localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify([]));
       localStorage.setItem(PUBLIC_STORAGE_KEYS.CURRENCY, 'USD');
       localStorage.setItem(PUBLIC_STORAGE_KEYS.LANGUAGE, 'en');
       localStorage.setItem(PUBLIC_STORAGE_KEYS.APP_INITIALIZED, 'true');
@@ -141,9 +123,9 @@ export const StorageEngine = {
         isWorkerProfileActive: false
       };
       localStorage.setItem(profileKey, JSON.stringify(initialProfile));
-      localStorage.setItem(`comfort_hub_user_${uid}_transactions`, JSON.stringify(INITIAL_TRANSACTIONS));
-      localStorage.setItem(`comfort_hub_user_${uid}_inventory`, JSON.stringify(INITIAL_INVENTORY));
-      localStorage.setItem(`comfort_hub_user_${uid}_credits`, JSON.stringify(INITIAL_CUSTOMER_CREDITS));
+      localStorage.setItem(`comfort_hub_user_${uid}_transactions`, JSON.stringify([]));
+      localStorage.setItem(`comfort_hub_user_${uid}_inventory`, JSON.stringify([]));
+      localStorage.setItem(`comfort_hub_user_${uid}_credits`, JSON.stringify([]));
       localStorage.setItem(`comfort_hub_user_${uid}_certificates`, JSON.stringify([]));
       localStorage.setItem(`comfort_hub_user_${uid}_applications`, JSON.stringify([]));
       localStorage.setItem(`comfort_hub_user_${uid}_progress`, JSON.stringify({}));
