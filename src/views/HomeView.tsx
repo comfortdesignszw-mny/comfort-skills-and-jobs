@@ -114,10 +114,14 @@ export const HomeView: React.FC = () => {
       <div className="relative rounded-3xl overflow-hidden bg-slate-900 shadow-md">
         <div className="relative aspect-[16/9] sm:aspect-[21/9] w-full max-h-72">
           <img
-            src="/src/assets/images/hero_sewing_artisan_1791981119811.jpg"
+            src="/images/hero_home.jpg"
             alt="Young Zimbabwean artisan smiling in Bulawayo workshop"
             className="w-full h-full object-cover object-center"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              // fallback if asset fails
+              e.currentTarget.src = 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1200&auto=format&fit=crop&q=80';
+            }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/40 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-6 text-white">

@@ -21,6 +21,27 @@
       },
       "required": ["id", "fullName", "email"]
     },
+    "Artisan": {
+      "title": "Artisan / Gig Worker",
+      "description": "Public verified artisan or gig worker profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "serviceCategory": { "type": "string", "maxLength": 80 },
+        "suburb": { "type": "string", "maxLength": 80 },
+        "city": { "type": "string", "maxLength": 50 },
+        "baseRateText": { "type": "string", "maxLength": 60 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "about": { "type": "string", "maxLength": 1000 },
+        "skills": { "type": "array" },
+        "rating": { "type": "number" },
+        "isVerified": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "serviceCategory", "suburb", "phone"]
+    },
     "JobVacancy": {
       "title": "Job Vacancy",
       "description": "Public verified job vacancy in Zimbabwe",
@@ -84,6 +105,10 @@
     "/users/{userId}": {
       "schema": "User",
       "description": "User profile document keyed by auth UID"
+    },
+    "/artisans/{workerId}": {
+      "schema": "Artisan",
+      "description": "Registered artisan profiles"
     },
     "/jobs/{jobId}": {
       "schema": "JobVacancy",

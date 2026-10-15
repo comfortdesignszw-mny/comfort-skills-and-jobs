@@ -9,7 +9,8 @@ import {
   JobApplication, 
   GigRequest, 
   Certificate,
-  SyncQueueItem 
+  SyncQueueItem,
+  CourseProgress 
 } from '../types';
 import { 
   INITIAL_COURSES, 
@@ -21,22 +22,16 @@ import {
   DEFAULT_USER_PROFILE 
 } from './initialData';
 
-const STORAGE_KEYS = {
-  COURSES: 'comfort_hub_courses_v1',
-  JOBS: 'comfort_hub_jobs_v1',
-  APPLICATIONS: 'comfort_hub_applications_v1',
-  WORKERS: 'comfort_hub_workers_v1',
-  GIG_REQUESTS: 'comfort_hub_gig_requests_v1',
-  TRANSACTIONS: 'comfort_hub_transactions_v1',
-  INVENTORY: 'comfort_hub_inventory_v1',
-  CREDITS: 'comfort_hub_credits_v1',
-  USER_PROFILE: 'comfort_hub_user_profile_v1',
-  CERTIFICATES: 'comfort_hub_certificates_v1',
-  SYNC_QUEUE: 'comfort_hub_sync_queue_v1',
+const PUBLIC_STORAGE_KEYS = {
+  COURSES: 'comfort_hub_courses_v2',
+  JOBS: 'comfort_hub_jobs_v2',
+  WORKERS: 'comfort_hub_workers_v2',
+  GIG_REQUESTS: 'comfort_hub_gig_requests_v2',
   FORCE_OFFLINE: 'comfort_hub_force_offline_mode',
   CURRENCY: 'comfort_hub_preferred_currency',
   LANGUAGE: 'comfort_hub_preferred_lang',
-  APP_INITIALIZED: 'comfort_hub_is_initialized'
+  APP_INITIALIZED: 'comfort_hub_is_initialized_v2',
+  ACTIVE_USER_ID: 'comfort_hub_active_user_id'
 };
 
 type Listener = () => void;
@@ -46,6 +41,9 @@ function notifyListeners() {
   listeners.forEach((l) => l());
 }
 
+// In-memory active user reference
+let currentUserId: string | null = null;
+
 export const StorageEngine = {
   subscribe(listener: Listener) {
     listeners.add(listener);
@@ -54,27 +52,50 @@ export const StorageEngine = {
     };
   },
 
+  /**
+   * Set active authenticated user ID.
+   * When null (logged out), personal data is cleared from the UI.
+   * When string (logged in), the user's private data is restored.
+   */
+  setActiveUser(uid: string | null) {
+    currentUserId = uid;
+    if (uid) {
+      localStorage.setItem(PUBLIC_STORAGE_KEYS.ACTIVE_USER_ID, uid);
+      // Initialize user's private storage containers if first time
+      this.initUserDataIfEmpty(uid);
+    } else {
+      localStorage.removeItem(PUBLIC_STORAGE_KEYS.ACTIVE_USER_ID);
+    }
+    notifyListeners();
+  },
+
+  getActiveUserId(): string | null {
+    if (currentUserId) return currentUserId;
+    return localStorage.getItem(PUBLIC_STORAGE_KEYS.ACTIVE_USER_ID);
+  },
+
+  isUserLoggedIn(): boolean {
+    return !!this.getActiveUserId();
+  },
+
+  getUserKey(suffix: string): string {
+    const uid = this.getActiveUserId();
+    if (!uid) return `comfort_hub_guest_${suffix}`;
+    return `comfort_hub_user_${uid}_${suffix}`;
+  },
+
   init() {
-    if (!localStorage.getItem(STORAGE_KEYS.APP_INITIALIZED)) {
-      localStorage.setItem(STORAGE_KEYS.COURSES, JSON.stringify(INITIAL_COURSES));
-      localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(INITIAL_JOBS));
-      localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify([
-        {
-          id: 'app-sample-1',
-          jobId: 'job-2',
-          jobTitle: 'Smartphone & Tablet Repair Technician',
-          companyName: 'Bulawayo Digital Spares Hub',
-          applicantName: 'Comfort Nyoni',
-          phone: '+263 77 412 8901',
-          email: 'comfort.nyoni@example.com',
-          coverNote: 'I have 2 years of hands-on experience replacing Android screens and fixing charging ports. Completed Comfort Hub Phone Repair module.',
-          appliedDate: '2026-10-13',
-          status: 'submitted',
-          syncStatus: 'synced'
-        }
-      ]));
-      localStorage.setItem(STORAGE_KEYS.WORKERS, JSON.stringify(INITIAL_GIG_WORKERS));
-      localStorage.setItem(STORAGE_KEYS.GIG_REQUESTS, JSON.stringify([
+    // Restore active user session if stored
+    const storedUser = localStorage.getItem(PUBLIC_STORAGE_KEYS.ACTIVE_USER_ID);
+    if (storedUser) {
+      currentUserId = storedUser;
+    }
+
+    if (!localStorage.getItem(PUBLIC_STORAGE_KEYS.APP_INITIALIZED)) {
+      localStorage.setItem(PUBLIC_STORAGE_KEYS.COURSES, JSON.stringify(INITIAL_COURSES));
+      localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify(INITIAL_JOBS));
+      localStorage.setItem(PUBLIC_STORAGE_KEYS.WORKERS, JSON.stringify(INITIAL_GIG_WORKERS));
+      localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify([
         {
           id: 'req-sample-1',
           title: 'Fix tripping breaker and install solar inverter switch',
@@ -83,37 +104,61 @@ export const StorageEngine = {
           customerPhone: '+263 71 223 9988',
           suburb: 'Morningside, Bulawayo',
           budget: '$30 - $40',
-          preferredDate: '2026-10-15',
+          preferredDate: 'Tomorrow',
           description: 'Our kitchen lights trip whenever the geyser switches on. Need an electrician to inspect circuit breaker.',
           status: 'accepted',
           assignedWorkerId: 'worker-1',
           assignedWorkerName: 'Sipho Moyo',
           quotedAmount: 35,
           quotedCurrency: 'USD',
-          createdAt: '2026-10-13',
+          createdAt: '2026-10-14',
           syncStatus: 'synced'
         }
       ]));
-      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(INITIAL_TRANSACTIONS));
-      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
-      localStorage.setItem(STORAGE_KEYS.CREDITS, JSON.stringify(INITIAL_CUSTOMER_CREDITS));
-      localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(DEFAULT_USER_PROFILE));
-      localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.SYNC_QUEUE, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.CURRENCY, 'USD');
-      localStorage.setItem(STORAGE_KEYS.LANGUAGE, 'en');
-      localStorage.setItem(STORAGE_KEYS.APP_INITIALIZED, 'true');
+      localStorage.setItem(PUBLIC_STORAGE_KEYS.CURRENCY, 'USD');
+      localStorage.setItem(PUBLIC_STORAGE_KEYS.LANGUAGE, 'en');
+      localStorage.setItem(PUBLIC_STORAGE_KEYS.APP_INITIALIZED, 'true');
     }
   },
 
-  // Courses
+  initUserDataIfEmpty(uid: string) {
+    const profileKey = `comfort_hub_user_${uid}_profile`;
+    if (!localStorage.getItem(profileKey)) {
+      const initialProfile: UserProfile = {
+        id: uid,
+        fullName: 'Member',
+        phone: '',
+        email: '',
+        suburb: 'Bulawayo CBD',
+        city: 'Bulawayo',
+        headline: 'Comfort Skills Hub Member',
+        bio: 'Artisan & small business member in Bulawayo',
+        education: '',
+        workExperience: '',
+        skills: ['Customer Service', 'Basic Trades'],
+        references: '',
+        roles: ['learner', 'jobseeker', 'worker', 'business_owner'],
+        isWorkerProfileActive: false
+      };
+      localStorage.setItem(profileKey, JSON.stringify(initialProfile));
+      localStorage.setItem(`comfort_hub_user_${uid}_transactions`, JSON.stringify(INITIAL_TRANSACTIONS));
+      localStorage.setItem(`comfort_hub_user_${uid}_inventory`, JSON.stringify(INITIAL_INVENTORY));
+      localStorage.setItem(`comfort_hub_user_${uid}_credits`, JSON.stringify(INITIAL_CUSTOMER_CREDITS));
+      localStorage.setItem(`comfort_hub_user_${uid}_certificates`, JSON.stringify([]));
+      localStorage.setItem(`comfort_hub_user_${uid}_applications`, JSON.stringify([]));
+      localStorage.setItem(`comfort_hub_user_${uid}_progress`, JSON.stringify({}));
+      localStorage.setItem(`comfort_hub_user_${uid}_sync_queue`, JSON.stringify([]));
+    }
+  },
+
+  // ================= PUBLIC DATA: COURSES =================
   getCourses(): Course[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.COURSES);
+    const raw = localStorage.getItem(PUBLIC_STORAGE_KEYS.COURSES);
     return raw ? JSON.parse(raw) : INITIAL_COURSES;
   },
 
   saveCourses(courses: Course[]) {
-    localStorage.setItem(STORAGE_KEYS.COURSES, JSON.stringify(courses));
+    localStorage.setItem(PUBLIC_STORAGE_KEYS.COURSES, JSON.stringify(courses));
     notifyListeners();
   },
 
@@ -131,27 +176,99 @@ export const StorageEngine = {
     return newState;
   },
 
-  // Certificates
+  // ================= PERSONAL DATA: COURSE PROGRESS =================
+  getCourseProgress(courseId: string): CourseProgress | null {
+    if (!this.isUserLoggedIn()) return null;
+    const raw = localStorage.getItem(this.getUserKey('progress'));
+    const allProgress: Record<string, CourseProgress> = raw ? JSON.parse(raw) : {};
+    return allProgress[courseId] || null;
+  },
+
+  recordQuizResult(courseId: string, lessonId: string, scorePercent: number): { isPass: boolean; cert?: Certificate } {
+    if (!this.isUserLoggedIn()) {
+      return { isPass: scorePercent > 70 };
+    }
+
+    const raw = localStorage.getItem(this.getUserKey('progress'));
+    const allProgress: Record<string, CourseProgress> = raw ? JSON.parse(raw) : {};
+    const existing = allProgress[courseId] || {
+      courseId,
+      completedLessonIds: [],
+      quizScores: {},
+      highestScore: 0,
+      isCertified: false
+    };
+
+    if (!existing.completedLessonIds.includes(lessonId)) {
+      existing.completedLessonIds.push(lessonId);
+    }
+    existing.quizScores[lessonId] = scorePercent;
+    if (scorePercent > existing.highestScore) {
+      existing.highestScore = scorePercent;
+    }
+
+    let awardedCert: Certificate | undefined = undefined;
+    // Requirement: Pass is more than 70%
+    if (scorePercent > 70) {
+      existing.isCertified = true;
+      existing.certifiedAt = new Date().toISOString().split('T')[0];
+
+      const course = this.getCourses().find((c) => c.id === courseId);
+      if (course) {
+        awardedCert = this.awardCertificate({
+          courseId,
+          courseTitle: course.title,
+          recipientName: this.getUserProfile().fullName || 'Comfort Member',
+          scorePercent
+        });
+      }
+    }
+
+    allProgress[courseId] = existing;
+    localStorage.setItem(this.getUserKey('progress'), JSON.stringify(allProgress));
+    notifyListeners();
+
+    return { isPass: scorePercent > 70, cert: awardedCert };
+  },
+
+  // ================= PERSONAL DATA: CERTIFICATES =================
   getCertificates(): Certificate[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.CERTIFICATES);
+    if (!this.isUserLoggedIn()) return [];
+    const raw = localStorage.getItem(this.getUserKey('certificates'));
     return raw ? JSON.parse(raw) : [];
   },
 
   awardCertificate(cert: Omit<Certificate, 'id' | 'dateEarned' | 'verificationCode'>): Certificate {
+    if (!this.isUserLoggedIn()) {
+      return {
+        ...cert,
+        id: `cert-${Date.now()}`,
+        dateEarned: new Date().toISOString().split('T')[0],
+        verificationCode: `ZW-BYO-${Math.floor(100000 + Math.random() * 900000)}`
+      };
+    }
+
     const certs = this.getCertificates();
     const existing = certs.find((c) => c.courseId === cert.courseId);
     if (existing) {
+      if (cert.scorePercent > existing.scorePercent) {
+        existing.scorePercent = cert.scorePercent;
+        localStorage.setItem(this.getUserKey('certificates'), JSON.stringify(certs));
+        notifyListeners();
+      }
       return existing;
     }
+
     const newCert: Certificate = {
       ...cert,
       id: `cert-${Date.now()}`,
+      userId: this.getActiveUserId() || undefined,
       dateEarned: new Date().toISOString().split('T')[0],
       verificationCode: `ZW-BYO-${Math.floor(100000 + Math.random() * 900000)}`
     };
     certs.unshift(newCert);
-    localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify(certs));
-    
+    localStorage.setItem(this.getUserKey('certificates'), JSON.stringify(certs));
+
     // Also auto-add acquired skill to user's profile
     const profile = this.getUserProfile();
     if (!profile.skills.includes(cert.courseTitle)) {
@@ -163,9 +280,9 @@ export const StorageEngine = {
     return newCert;
   },
 
-  // Jobs
+  // ================= PUBLIC DATA: JOBS =================
   getJobs(): JobVacancy[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.JOBS);
+    const raw = localStorage.getItem(PUBLIC_STORAGE_KEYS.JOBS);
     return raw ? JSON.parse(raw) : INITIAL_JOBS;
   },
 
@@ -179,7 +296,7 @@ export const StorageEngine = {
       syncStatus: isOnline ? 'synced' : 'queued'
     };
     jobs.unshift(newJob);
-    localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
+    localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify(jobs));
 
     if (!isOnline) {
       this.addToSyncQueue({
@@ -196,24 +313,29 @@ export const StorageEngine = {
     return newJob;
   },
 
-  // Applications
+  // ================= PERSONAL DATA: JOB APPLICATIONS =================
   getApplications(): JobApplication[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.APPLICATIONS);
+    if (!this.isUserLoggedIn()) return [];
+    const raw = localStorage.getItem(this.getUserKey('applications'));
     return raw ? JSON.parse(raw) : [];
   },
 
   submitApplication(app: Omit<JobApplication, 'id' | 'appliedDate' | 'syncStatus' | 'status'>): JobApplication {
-    const apps = this.getApplications();
     const isOnline = this.isEffectivelyOnline();
     const newApp: JobApplication = {
       ...app,
       id: `app-${Date.now()}`,
+      userId: this.getActiveUserId() || undefined,
       appliedDate: new Date().toISOString().split('T')[0],
       status: isOnline ? 'submitted' : 'queued',
       syncStatus: isOnline ? 'synced' : 'queued'
     };
-    apps.unshift(newApp);
-    localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify(apps));
+
+    if (this.isUserLoggedIn()) {
+      const apps = this.getApplications();
+      apps.unshift(newApp);
+      localStorage.setItem(this.getUserKey('applications'), JSON.stringify(apps));
+    }
 
     if (!isOnline) {
       this.addToSyncQueue({
@@ -230,9 +352,9 @@ export const StorageEngine = {
     return newApp;
   },
 
-  // Gig Workers
+  // ================= PUBLIC DATA: GIG WORKERS & ARTISANS =================
   getWorkers(): GigWorker[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.WORKERS);
+    const raw = localStorage.getItem(PUBLIC_STORAGE_KEYS.WORKERS);
     return raw ? JSON.parse(raw) : INITIAL_GIG_WORKERS;
   },
 
@@ -244,13 +366,69 @@ export const StorageEngine = {
     } else {
       workers.unshift(worker);
     }
-    localStorage.setItem(STORAGE_KEYS.WORKERS, JSON.stringify(workers));
+    localStorage.setItem(PUBLIC_STORAGE_KEYS.WORKERS, JSON.stringify(workers));
     notifyListeners();
   },
 
-  // Gig Requests
+  /**
+   * Requirement 3: Allow users to create artisan profiles from Work >> Gigs
+   */
+  createArtisanProfile(params: {
+    name: string;
+    serviceCategory: string;
+    suburb: string;
+    city?: string;
+    pricingType?: 'Fixed' | 'Hourly' | 'Daily' | 'Quotation';
+    baseRateText: string;
+    phone: string;
+    skills: string[];
+    about: string;
+    avatarUrl?: string;
+  }): GigWorker {
+    const newWorker: GigWorker = {
+      id: `artisan-${Date.now()}`,
+      userId: this.getActiveUserId() || undefined,
+      name: params.name.trim(),
+      avatarUrl: params.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      serviceCategory: params.serviceCategory,
+      suburb: params.suburb.trim(),
+      city: params.city || 'Bulawayo',
+      rating: 5.0,
+      reviewsCount: 1,
+      pricingType: params.pricingType || 'Quotation',
+      baseRateText: params.baseRateText.trim(),
+      isAvailableToday: true,
+      isVerified: true,
+      completedJobsCount: 0,
+      phone: params.phone.trim(),
+      skills: params.skills.length > 0 ? params.skills : [params.serviceCategory],
+      about: params.about.trim(),
+      sampleWorkPhotos: []
+    };
+
+    this.saveWorker(newWorker);
+
+    // If logged in, update current user's profile to activate artisan mode
+    if (this.isUserLoggedIn()) {
+      const profile = this.getUserProfile();
+      this.saveUserProfile({
+        ...profile,
+        fullName: profile.fullName || newWorker.name,
+        phone: profile.phone || newWorker.phone,
+        suburb: profile.suburb || newWorker.suburb,
+        isWorkerProfileActive: true,
+        workerTrade: newWorker.serviceCategory,
+        workerRate: newWorker.baseRateText,
+        roles: profile.roles.includes('worker') ? profile.roles : [...profile.roles, 'worker']
+      });
+    }
+
+    return newWorker;
+  },
+
+  // ================= PUBLIC DATA: GIG REQUESTS =================
   getGigRequests(): GigRequest[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.GIG_REQUESTS);
+    const raw = localStorage.getItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS);
     return raw ? JSON.parse(raw) : [];
   },
 
@@ -265,7 +443,7 @@ export const StorageEngine = {
       syncStatus: isOnline ? 'synced' : 'queued'
     };
     reqs.unshift(newReq);
-    localStorage.setItem(STORAGE_KEYS.GIG_REQUESTS, JSON.stringify(reqs));
+    localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify(reqs));
 
     if (!isOnline) {
       this.addToSyncQueue({
@@ -295,37 +473,42 @@ export const StorageEngine = {
       }
       return r;
     });
-    localStorage.setItem(STORAGE_KEYS.GIG_REQUESTS, JSON.stringify(updated));
+    localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify(updated));
     notifyListeners();
   },
 
-  // Business Transactions
+  // ================= PERSONAL DATA: BUSINESS TRANSACTIONS =================
   getTransactions(): BusinessTransaction[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-    return raw ? JSON.parse(raw) : INITIAL_TRANSACTIONS;
+    if (!this.isUserLoggedIn()) return [];
+    const raw = localStorage.getItem(this.getUserKey('transactions'));
+    return raw ? JSON.parse(raw) : [];
   },
 
   addTransaction(tx: Omit<BusinessTransaction, 'id' | 'syncStatus'>): BusinessTransaction {
-    const txs = this.getTransactions();
     const isOnline = this.isEffectivelyOnline();
     const newTx: BusinessTransaction = {
       ...tx,
       id: `tx-${Date.now()}`,
+      userId: this.getActiveUserId() || undefined,
       syncStatus: isOnline ? 'synced' : 'saved_locally'
     };
-    txs.unshift(newTx);
-    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(txs));
 
-    // If related inventory item exists and it's a sale, reduce quantity
-    if (newTx.type === 'sale' && newTx.relatedInventoryId) {
-      const inv = this.getInventory();
-      const updatedInv = inv.map((item) => {
-        if (item.id === newTx.relatedInventoryId && item.quantity > 0) {
-          return { ...item, quantity: item.quantity - 1 };
-        }
-        return item;
-      });
-      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(updatedInv));
+    if (this.isUserLoggedIn()) {
+      const txs = this.getTransactions();
+      txs.unshift(newTx);
+      localStorage.setItem(this.getUserKey('transactions'), JSON.stringify(txs));
+
+      // If related inventory item exists and it's a sale, reduce quantity
+      if (newTx.type === 'sale' && newTx.relatedInventoryId) {
+        const inv = this.getInventory();
+        const updatedInv = inv.map((item) => {
+          if (item.id === newTx.relatedInventoryId && item.quantity > 0) {
+            return { ...item, quantity: item.quantity - 1 };
+          }
+          return item;
+        });
+        localStorage.setItem(this.getUserKey('inventory'), JSON.stringify(updatedInv));
+      }
     }
 
     notifyListeners();
@@ -333,18 +516,28 @@ export const StorageEngine = {
   },
 
   deleteTransaction(id: string) {
+    if (!this.isUserLoggedIn()) return;
     const txs = this.getTransactions().filter((t) => t.id !== id);
-    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(txs));
+    localStorage.setItem(this.getUserKey('transactions'), JSON.stringify(txs));
     notifyListeners();
   },
 
-  // Inventory
+  // ================= PERSONAL DATA: INVENTORY =================
   getInventory(): InventoryItem[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.INVENTORY);
-    return raw ? JSON.parse(raw) : INITIAL_INVENTORY;
+    if (!this.isUserLoggedIn()) return [];
+    const raw = localStorage.getItem(this.getUserKey('inventory'));
+    return raw ? JSON.parse(raw) : [];
   },
 
   saveInventoryItem(item: Omit<InventoryItem, 'id' | 'lastUpdated'> & { id?: string }): InventoryItem {
+    if (!this.isUserLoggedIn()) {
+      return {
+        ...item,
+        id: `inv-${Date.now()}`,
+        lastUpdated: new Date().toISOString().split('T')[0]
+      };
+    }
+
     const items = this.getInventory();
     if (item.id) {
       const index = items.findIndex((i) => i.id === item.id);
@@ -352,10 +545,11 @@ export const StorageEngine = {
         const updated: InventoryItem = {
           ...item,
           id: item.id,
+          userId: this.getActiveUserId() || undefined,
           lastUpdated: new Date().toISOString().split('T')[0]
         };
         items[index] = updated;
-        localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(items));
+        localStorage.setItem(this.getUserKey('inventory'), JSON.stringify(items));
         notifyListeners();
         return updated;
       }
@@ -364,27 +558,38 @@ export const StorageEngine = {
     const newItem: InventoryItem = {
       ...item,
       id: `inv-${Date.now()}`,
+      userId: this.getActiveUserId() || undefined,
       lastUpdated: new Date().toISOString().split('T')[0]
     };
     items.unshift(newItem);
-    localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(items));
+    localStorage.setItem(this.getUserKey('inventory'), JSON.stringify(items));
     notifyListeners();
     return newItem;
   },
 
   deleteInventoryItem(id: string) {
+    if (!this.isUserLoggedIn()) return;
     const items = this.getInventory().filter((i) => i.id !== id);
-    localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(items));
+    localStorage.setItem(this.getUserKey('inventory'), JSON.stringify(items));
     notifyListeners();
   },
 
-  // Customer Credits
+  // ================= PERSONAL DATA: CUSTOMER CREDITS =================
   getCustomerCredits(): CustomerCredit[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.CREDITS);
-    return raw ? JSON.parse(raw) : INITIAL_CUSTOMER_CREDITS;
+    if (!this.isUserLoggedIn()) return [];
+    const raw = localStorage.getItem(this.getUserKey('credits'));
+    return raw ? JSON.parse(raw) : [];
   },
 
   saveCustomerCredit(credit: Omit<CustomerCredit, 'id' | 'lastPurchaseDate'> & { id?: string }): CustomerCredit {
+    if (!this.isUserLoggedIn()) {
+      return {
+        ...credit,
+        id: `cred-${Date.now()}`,
+        lastPurchaseDate: new Date().toISOString().split('T')[0]
+      };
+    }
+
     const credits = this.getCustomerCredits();
     if (credit.id) {
       const index = credits.findIndex((c) => c.id === credit.id);
@@ -392,10 +597,11 @@ export const StorageEngine = {
         const updated: CustomerCredit = {
           ...credit,
           id: credit.id,
+          userId: this.getActiveUserId() || undefined,
           lastPurchaseDate: new Date().toISOString().split('T')[0]
         };
         credits[index] = updated;
-        localStorage.setItem(STORAGE_KEYS.CREDITS, JSON.stringify(credits));
+        localStorage.setItem(this.getUserKey('credits'), JSON.stringify(credits));
         notifyListeners();
         return updated;
       }
@@ -404,27 +610,24 @@ export const StorageEngine = {
     const newCred: CustomerCredit = {
       ...credit,
       id: `cred-${Date.now()}`,
+      userId: this.getActiveUserId() || undefined,
       lastPurchaseDate: new Date().toISOString().split('T')[0]
     };
     credits.unshift(newCred);
-    localStorage.setItem(STORAGE_KEYS.CREDITS, JSON.stringify(credits));
+    localStorage.setItem(this.getUserKey('credits'), JSON.stringify(credits));
     notifyListeners();
     return newCred;
   },
 
   recordCustomerPayment(creditId: string, paymentAmount: number) {
+    if (!this.isUserLoggedIn()) return;
     const credits = this.getCustomerCredits();
     const cred = credits.find((c) => c.id === creditId);
     if (!cred) return;
 
     const remaining = Math.max(0, cred.amountOwed - paymentAmount);
-    if (remaining === 0) {
-      // Clear credit or keep as 0
-      cred.amountOwed = 0;
-    } else {
-      cred.amountOwed = remaining;
-    }
-    localStorage.setItem(STORAGE_KEYS.CREDITS, JSON.stringify(credits));
+    cred.amountOwed = remaining;
+    localStorage.setItem(this.getUserKey('credits'), JSON.stringify(credits));
 
     // Record as incoming sale transaction
     this.addTransaction({
@@ -442,47 +645,53 @@ export const StorageEngine = {
   },
 
   deleteCustomerCredit(id: string) {
+    if (!this.isUserLoggedIn()) return;
     const credits = this.getCustomerCredits().filter((c) => c.id !== id);
-    localStorage.setItem(STORAGE_KEYS.CREDITS, JSON.stringify(credits));
+    localStorage.setItem(this.getUserKey('credits'), JSON.stringify(credits));
     notifyListeners();
   },
 
-  // User Profile
+  // ================= PERSONAL DATA: USER PROFILE =================
   getUserProfile(): UserProfile {
-    const raw = localStorage.getItem(STORAGE_KEYS.USER_PROFILE);
+    if (!this.isUserLoggedIn()) return DEFAULT_USER_PROFILE;
+    const raw = localStorage.getItem(this.getUserKey('profile'));
     return raw ? JSON.parse(raw) : DEFAULT_USER_PROFILE;
   },
 
   saveUserProfile(profile: UserProfile) {
-    localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(profile));
+    if (!this.isUserLoggedIn()) return;
+    localStorage.setItem(this.getUserKey('profile'), JSON.stringify(profile));
     notifyListeners();
   },
 
-  // Sync Queue & Outbox
+  // ================= SYNC QUEUE & OUTBOX =================
   getSyncQueue(): SyncQueueItem[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.SYNC_QUEUE);
+    if (!this.isUserLoggedIn()) return [];
+    const raw = localStorage.getItem(this.getUserKey('sync_queue'));
     return raw ? JSON.parse(raw) : [];
   },
 
   addToSyncQueue(item: SyncQueueItem) {
+    if (!this.isUserLoggedIn()) return;
     const queue = this.getSyncQueue();
     queue.push(item);
-    localStorage.setItem(STORAGE_KEYS.SYNC_QUEUE, JSON.stringify(queue));
+    localStorage.setItem(this.getUserKey('sync_queue'), JSON.stringify(queue));
     notifyListeners();
   },
 
   clearSyncQueue() {
-    localStorage.setItem(STORAGE_KEYS.SYNC_QUEUE, JSON.stringify([]));
+    if (!this.isUserLoggedIn()) return;
+    localStorage.setItem(this.getUserKey('sync_queue'), JSON.stringify([]));
     notifyListeners();
   },
 
-  // Flight Mode / Offline Simulator
+  // ================= FLIGHT MODE & PREFERENCES =================
   getIsForceOffline(): boolean {
-    return localStorage.getItem(STORAGE_KEYS.FORCE_OFFLINE) === 'true';
+    return localStorage.getItem(PUBLIC_STORAGE_KEYS.FORCE_OFFLINE) === 'true';
   },
 
   setForceOffline(val: boolean) {
-    localStorage.setItem(STORAGE_KEYS.FORCE_OFFLINE, val ? 'true' : 'false');
+    localStorage.setItem(PUBLIC_STORAGE_KEYS.FORCE_OFFLINE, val ? 'true' : 'false');
     notifyListeners();
   },
 
@@ -491,122 +700,122 @@ export const StorageEngine = {
     return typeof navigator !== 'undefined' ? navigator.onLine : true;
   },
 
-  // Simulate Cloud Sync
+  getPreferredCurrency(): 'USD' | 'ZiG' {
+    return (localStorage.getItem(PUBLIC_STORAGE_KEYS.CURRENCY) as 'USD' | 'ZiG') || 'USD';
+  },
+
+  setPreferredCurrency(c: 'USD' | 'ZiG') {
+    localStorage.setItem(PUBLIC_STORAGE_KEYS.CURRENCY, c);
+    notifyListeners();
+  },
+
+  getPreferredLanguage(): 'en' | 'nd' | 'sn' {
+    return (localStorage.getItem(PUBLIC_STORAGE_KEYS.LANGUAGE) as 'en' | 'nd' | 'sn') || 'en';
+  },
+
+  setPreferredLanguage(l: 'en' | 'nd' | 'sn') {
+    localStorage.setItem(PUBLIC_STORAGE_KEYS.LANGUAGE, l);
+    notifyListeners();
+  },
+
   async synchronizeNow(): Promise<{ syncedCount: number; message: string }> {
     const queue = this.getSyncQueue();
     const count = queue.length;
-    
-    // Simulate brief network latency for realism
     await new Promise((r) => setTimeout(r, 600));
 
-    // Mark queued items as synced
-    const apps = this.getApplications().map((a) => (a.syncStatus === 'queued' ? { ...a, syncStatus: 'synced' as const, status: 'submitted' as const } : a));
-    localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify(apps));
+    if (this.isUserLoggedIn()) {
+      const apps = this.getApplications().map((a) => (a.syncStatus === 'queued' ? { ...a, syncStatus: 'synced' as const, status: 'submitted' as const } : a));
+      localStorage.setItem(this.getUserKey('applications'), JSON.stringify(apps));
+
+      const txs = this.getTransactions().map((t) => (t.syncStatus === 'saved_locally' ? { ...t, syncStatus: 'synced' as const } : t));
+      localStorage.setItem(this.getUserKey('transactions'), JSON.stringify(txs));
+
+      this.clearSyncQueue();
+    }
 
     const gigs = this.getGigRequests().map((g) => (g.syncStatus === 'queued' ? { ...g, syncStatus: 'synced' as const } : g));
-    localStorage.setItem(STORAGE_KEYS.GIG_REQUESTS, JSON.stringify(gigs));
-
-    const txs = this.getTransactions().map((t) => (t.syncStatus === 'saved_locally' ? { ...t, syncStatus: 'synced' as const } : t));
-    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(txs));
+    localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify(gigs));
 
     const jobs = this.getJobs().map((j) => (j.syncStatus === 'queued' ? { ...j, syncStatus: 'synced' as const } : j));
-    localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(jobs));
+    localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify(jobs));
 
-    this.clearSyncQueue();
     notifyListeners();
-
     return {
       syncedCount: count,
       message: count > 0 ? `Successfully synchronized ${count} offline updates with Zimbabwe server.` : 'Device database is already up to date.'
     };
   },
 
-  // Currency & Language
-  getPreferredCurrency(): 'USD' | 'ZiG' {
-    return (localStorage.getItem(STORAGE_KEYS.CURRENCY) as 'USD' | 'ZiG') || 'USD';
-  },
-
-  setPreferredCurrency(curr: 'USD' | 'ZiG') {
-    localStorage.setItem(STORAGE_KEYS.CURRENCY, curr);
-    notifyListeners();
-  },
-
-  getPreferredLanguage(): 'en' | 'nd' | 'sn' {
-    return (localStorage.getItem(STORAGE_KEYS.LANGUAGE) as 'en' | 'nd' | 'sn') || 'en';
-  },
-
-  setPreferredLanguage(lang: 'en' | 'nd' | 'sn') {
-    localStorage.setItem(STORAGE_KEYS.LANGUAGE, lang);
-    notifyListeners();
-  },
-
-  // Storage Stats (in KB)
   calculateStorageUsage(): { totalKb: number; courseCount: number; txCount: number } {
-    let totalChars = 0;
-    for (const key of Object.values(STORAGE_KEYS)) {
-      const val = localStorage.getItem(key);
-      if (val) totalChars += val.length;
+    let totalBytes = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('comfort_hub')) {
+        const val = localStorage.getItem(key) || '';
+        totalBytes += key.length + val.length;
+      }
     }
-    const totalKb = Math.round((totalChars * 2) / 1024); // approx UTF-16
     return {
-      totalKb: totalKb || 42,
+      totalKb: Math.round(totalBytes / 1024),
       courseCount: this.getCourses().filter((c) => c.isDownloaded).length,
       txCount: this.getTransactions().length
     };
   },
 
-  // Backup & Restore
-  exportBackupJSON(): string {
-    const backup = {
-      version: '1.0',
-      exportedAt: new Date().toISOString(),
-      app: 'Comfort Skills & Jobs Hub',
-      location: 'Bulawayo, Zimbabwe',
-      data: {
-        courses: this.getCourses(),
-        jobs: this.getJobs(),
-        applications: this.getApplications(),
-        workers: this.getWorkers(),
-        gigRequests: this.getGigRequests(),
-        transactions: this.getTransactions(),
-        inventory: this.getInventory(),
-        customerCredits: this.getCustomerCredits(),
-        userProfile: this.getUserProfile(),
-        certificates: this.getCertificates()
+  exportDatabaseJson(): string {
+    const backup: Record<string, any> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('comfort_hub')) {
+        try {
+          backup[key] = JSON.parse(localStorage.getItem(key) || 'null');
+        } catch {
+          backup[key] = localStorage.getItem(key);
+        }
       }
-    };
+    }
     return JSON.stringify(backup, null, 2);
   },
 
-  restoreBackupJSON(jsonStr: string): boolean {
+  exportBackupJSON(): string {
+    return this.exportDatabaseJson();
+  },
+
+  restoreDatabaseFromJson(jsonString: string): boolean {
     try {
-      const parsed = JSON.parse(jsonStr);
-      if (!parsed.data) return false;
-
-      if (parsed.data.courses) localStorage.setItem(STORAGE_KEYS.COURSES, JSON.stringify(parsed.data.courses));
-      if (parsed.data.jobs) localStorage.setItem(STORAGE_KEYS.JOBS, JSON.stringify(parsed.data.jobs));
-      if (parsed.data.applications) localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify(parsed.data.applications));
-      if (parsed.data.workers) localStorage.setItem(STORAGE_KEYS.WORKERS, JSON.stringify(parsed.data.workers));
-      if (parsed.data.gigRequests) localStorage.setItem(STORAGE_KEYS.GIG_REQUESTS, JSON.stringify(parsed.data.gigRequests));
-      if (parsed.data.transactions) localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(parsed.data.transactions));
-      if (parsed.data.inventory) localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(parsed.data.inventory));
-      if (parsed.data.customerCredits) localStorage.setItem(STORAGE_KEYS.CREDITS, JSON.stringify(parsed.data.customerCredits));
-      if (parsed.data.userProfile) localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(parsed.data.userProfile));
-      if (parsed.data.certificates) localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify(parsed.data.certificates));
-
+      const data = JSON.parse(jsonString);
+      if (!data || typeof data !== 'object') return false;
+      Object.keys(data).forEach((key) => {
+        if (key.startsWith('comfort_hub')) {
+          const val = typeof data[key] === 'object' ? JSON.stringify(data[key]) : String(data[key]);
+          localStorage.setItem(key, val);
+        }
+      });
       notifyListeners();
       return true;
-    } catch {
+    } catch (e) {
+      console.error('Failed to parse backup JSON:', e);
       return false;
     }
   },
 
+  restoreBackupJSON(jsonString: string): boolean {
+    return this.restoreDatabaseFromJson(jsonString);
+  },
+
   resetToDefault() {
-    localStorage.removeItem(STORAGE_KEYS.APP_INITIALIZED);
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('comfort_hub')) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
     this.init();
     notifyListeners();
   }
 };
 
-// Initialize on load
+// Initialize default public tables immediately
 StorageEngine.init();

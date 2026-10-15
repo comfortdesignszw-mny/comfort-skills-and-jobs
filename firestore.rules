@@ -20,6 +20,12 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
+    match /artisans/{workerId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || request.auth.token.email == "comfort.designszw@gmail.com");
+    }
+
     match /jobs/{jobId} {
       allow read: if true;
       allow create: if isSignedIn();

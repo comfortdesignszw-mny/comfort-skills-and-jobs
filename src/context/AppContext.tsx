@@ -76,24 +76,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
-  // Monitor Firebase Auth state
+  // Monitor Firebase Auth state & enforce account-isolated privacy
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       setAuthLoading(false);
       if (user) {
+        StorageEngine.setActiveUser(user.uid);
         try {
           const synced = await syncUserProfileWithFirestore(user);
           const currentProfile = StorageEngine.getUserProfile();
           StorageEngine.saveUserProfile({
             ...currentProfile,
             ...synced,
-            fullName: synced.fullName || user.displayName || currentProfile.fullName,
+            fullName: synced.fullName || user.displayName || currentProfile.fullName || 'Member',
             email: user.email || currentProfile.email
           });
         } catch (e) {
           console.warn('Could not sync user profile on startup:', e);
         }
+      } else {
+        StorageEngine.setActiveUser(null);
       }
     });
     return () => unsubscribe();
@@ -166,7 +169,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const signOutUser = async () => {
     try {
       await fbSignOut(auth);
-      showToast('Signed out successfully.');
+      StorageEngine.setActiveUser(null);
+      showToast('Signed out. Personal data and business records secured and cleared from screen.');
     } catch (err: any) {
       showToast('Failed to sign out.');
     }

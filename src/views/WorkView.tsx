@@ -19,7 +19,9 @@ import {
   UserCheck,
   ChevronLeft,
   X,
-  FileText
+  FileText,
+  UserPlus,
+  Sparkles
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { StorageEngine } from '../db/storage';
@@ -35,7 +37,9 @@ export const WorkView: React.FC = () => {
     userProfile, 
     isEffectivelyOnline, 
     currency,
-    showToast 
+    showToast,
+    currentUser,
+    setShowAuthModal
   } = useApp();
 
   const jobs = StorageEngine.getJobs();
@@ -50,6 +54,7 @@ export const WorkView: React.FC = () => {
   const [selectedTradeCategory, setSelectedTradeCategory] = useState('All');
   const [showPostJobModal, setShowPostJobModal] = useState(false);
   const [showPostGigModal, setShowPostGigModal] = useState(false);
+  const [showCreateArtisanModal, setShowCreateArtisanModal] = useState(false);
   const [selectedWorkerForRequest, setSelectedWorkerForRequest] = useState<GigWorker | null>(null);
 
   // Application Modal state
@@ -71,6 +76,15 @@ export const WorkView: React.FC = () => {
   const [taskBudget, setTaskBudget] = useState('$20 - $30');
   const [taskDate, setTaskDate] = useState('Tomorrow');
   const [taskDesc, setTaskDesc] = useState('');
+
+  // Create Artisan Profile Form State (Requirement 3)
+  const [artisanName, setArtisanName] = useState(currentUser?.displayName || userProfile.fullName || '');
+  const [artisanCategory, setArtisanCategory] = useState('Plumbing & electrical work');
+  const [artisanSuburb, setArtisanSuburb] = useState(userProfile.suburb || 'Bulawayo CBD');
+  const [artisanRate, setArtisanRate] = useState('$15 / visit + quotation');
+  const [artisanPhone, setArtisanPhone] = useState(userProfile.phone || '+263 ');
+  const [artisanSkills, setArtisanSkills] = useState('Solar Setup, Fault Finding, DB Rewiring');
+  const [artisanAbout, setArtisanAbout] = useState('Certified vocational artisan providing reliable, guaranteed workmanship across Bulawayo.');
 
   // Active Job for detail view
   const activeJob = jobs.find((j) => j.id === selectedJobId) || null;
@@ -98,13 +112,13 @@ export const WorkView: React.FC = () => {
       return;
     }
 
-    const app = StorageEngine.submitApplication({
+    StorageEngine.submitApplication({
       jobId: job.id,
       jobTitle: job.title,
       companyName: job.companyName,
-      applicantName: userProfile.fullName || 'Comfort Nyoni',
+      applicantName: userProfile.fullName || currentUser?.displayName || 'Comfort Member',
       phone: userProfile.phone || '+263 77 412 8901',
-      email: userProfile.email || 'applicant@comforthub.zw',
+      email: userProfile.email || currentUser?.email || 'applicant@comforthub.zw',
       coverNote: coverNote
     });
 
@@ -147,36 +161,64 @@ export const WorkView: React.FC = () => {
     StorageEngine.createGigRequest({
       title: taskTitle,
       category: taskCategory,
-      customerName: userProfile.fullName || 'Comfort Nyoni',
-      customerPhone: userProfile.phone || '+263 77 412 8901',
+      customerName: userProfile.fullName || currentUser?.displayName || 'Bulawayo Resident',
+      customerPhone: userProfile.phone || '+263 77 000 0000',
       suburb: taskSuburb,
       budget: taskBudget,
       preferredDate: taskDate,
-      description: taskDesc || 'Task posted by local customer.',
-      assignedWorkerId: selectedWorkerForRequest?.id,
-      assignedWorkerName: selectedWorkerForRequest?.name,
-      quotedAmount: selectedWorkerForRequest ? 25 : undefined,
-      quotedCurrency: 'USD'
+      description: taskDesc || 'Customer requested task via Comfort Gig matching.',
+      assignedWorkerId: selectedWorkerForRequest ? selectedWorkerForRequest.id : undefined,
+      assignedWorkerName: selectedWorkerForRequest ? selectedWorkerForRequest.name : undefined
     });
 
     setShowPostGigModal(false);
     setSelectedWorkerForRequest(null);
     setTaskTitle('');
     setTaskDesc('');
-    showToast('Gig task requested! Local workers will review and send quotes.');
+    showToast(isEffectivelyOnline 
+      ? 'Gig task posted! Local artisans will be notified.' 
+      : 'Gig task saved locally and queued in outbox.');
+  };
+
+  // Requirement 3: Handler to create artisan profile
+  const handleCreateArtisan = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!artisanName.trim() || !artisanPhone.trim()) {
+      showToast('Please enter your name and phone number.');
+      return;
+    }
+
+    const skillsArray = artisanSkills
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    StorageEngine.createArtisanProfile({
+      name: artisanName,
+      serviceCategory: artisanCategory,
+      suburb: artisanSuburb,
+      city: 'Bulawayo',
+      pricingType: 'Quotation',
+      baseRateText: artisanRate || '$15 / visit + quotation',
+      phone: artisanPhone,
+      skills: skillsArray.length > 0 ? skillsArray : [artisanCategory],
+      about: artisanAbout || `Experienced ${artisanCategory} professional providing quality work in ${artisanSuburb}.`
+    });
+
+    setShowCreateArtisanModal(false);
+    showToast(`Congratulations ${artisanName}! Your artisan profile is now active and listed in Bulawayo gigs.`);
   };
 
   const handleCompleteGigAndRecordSale = (gig: GigRequest) => {
+    const amount = gig.quotedAmount || 30;
     StorageEngine.updateGigRequestStatus(gig.id, 'completed');
-    
-    // Automatically offer to record as Business Sale!
-    const amount = gig.quotedAmount || 25;
+
     StorageEngine.addTransaction({
       type: 'gig_payment',
       amount: amount,
       currency: gig.quotedCurrency || 'USD',
       category: gig.category,
-      description: `Payment for gig: ${gig.title}`,
+      description: `Completed gig: ${gig.title}`,
       date: new Date().toISOString().split('T')[0],
       paymentMethod: 'cash',
       customerOrSupplier: gig.customerName
@@ -187,6 +229,52 @@ export const WorkView: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 pb-24 space-y-6">
+      {/* Top Navigation & Back to Home */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => {
+            if (activeJob) {
+              setSelectedJobId(null);
+            } else {
+              setActiveTab('home');
+            }
+          }}
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-teal-700 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-2xs transition active:scale-95"
+        >
+          <ChevronLeft className="w-4 h-4" /> {activeJob ? 'Back to Vacancies' : 'Back to Home'}
+        </button>
+        <span className="text-xs font-semibold text-slate-500">
+          Zimbabwe Verified Opportunities
+        </span>
+      </div>
+
+      {/* Hero Banner with Tradespeople & Artisans (Fixed for Cloudflare production build) */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
+        <div className="space-y-1.5 max-w-xl">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-teal-600">
+            Modules Two &amp; Three · Employment &amp; Gig Matching
+          </span>
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+            Verified Jobs &amp; Local Artisans
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+            Discover verified employer vacancies across Bulawayo and Zimbabwe, or hire trusted local artisans and post gigs directly without commission cuts.
+          </p>
+        </div>
+
+        <div className="w-full md:w-64 h-36 rounded-2xl overflow-hidden shrink-0 border border-slate-200 shadow-xs">
+          <img
+            src="/images/hero_work.jpg"
+            alt="Skilled Zimbabwean tradespeople and artisans"
+            className="w-full h-full object-cover"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.src = 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600&auto=format&fit=crop&q=80';
+            }}
+          />
+        </div>
+      </div>
+
       {/* Work Sub Tabs: Local Jobs vs Gig Workers */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-200 pb-3">
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
@@ -227,7 +315,7 @@ export const WorkView: React.FC = () => {
           </button>
         </div>
 
-        {/* Action Button */}
+        {/* Action Buttons for Jobs / Gigs (Requirement 3: Create Artisan Profile button) */}
         {workSubTab === 'jobs' ? (
           <button
             onClick={() => setShowPostJobModal(true)}
@@ -237,24 +325,34 @@ export const WorkView: React.FC = () => {
             <span>Post Vacancy</span>
           </button>
         ) : (
-          <button
-            onClick={() => setShowPostGigModal(true)}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 active:scale-95 transition self-stretch sm:self-auto shadow-2xs"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Request a Gig</span>
-          </button>
+          <div className="flex items-center gap-2 self-stretch sm:self-auto">
+            {/* Requirement 3: Button to allow users to create artisan profiles */}
+            <button
+              onClick={() => setShowCreateArtisanModal(true)}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 active:scale-95 transition shadow-2xs whitespace-nowrap"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>+ Create Artisan Profile</span>
+            </button>
+            <button
+              onClick={() => setShowPostGigModal(true)}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 active:scale-95 transition shadow-2xs whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Request a Gig</span>
+            </button>
+          </div>
         )}
       </div>
 
-      {/* Trust & Safety Warning Banner strictly per specification */}
-      <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-3.5 text-xs text-amber-900 flex items-start gap-2.5">
-        <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-        <div>
-          <span className="font-bold">Zimbabwe Trust &amp; Safety Rule: </span>
-          <span>
-            Legitimate employers and contractors never charge job applicants upfront recruitment, registration, or interview fees. Report any suspicious fee requests immediately.
-          </span>
+      {/* Trust & Safety Warning Banner */}
+      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-start gap-2.5 text-xs text-emerald-900">
+        <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+        <div className="space-y-0.5">
+          <span className="font-bold block">No Recruitment Fees Guarantee</span>
+          <p className="text-[11px] text-emerald-800 leading-relaxed">
+            Comfort Hub enforces zero recruitment fees. Never pay an employer for an interview, registration, or medical test. Report suspicious listings immediately.
+          </p>
         </div>
       </div>
 
@@ -266,7 +364,7 @@ export const WorkView: React.FC = () => {
             <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-6">
               <button
                 onClick={() => setSelectedJobId(null)}
-                className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-teal-700 bg-slate-100 px-3 py-1.5 rounded-xl transition"
               >
                 <ChevronLeft className="w-4 h-4" /> Back to Vacancies
               </button>
@@ -339,7 +437,7 @@ export const WorkView: React.FC = () => {
                   <ul className="space-y-1.5 text-xs text-slate-700">
                     {activeJob.requirements.map((req, idx) => (
                       <li key={idx} className="flex items-start gap-2">
-                        <span className="text-teal-600 font-bold">•</span>
+                        <span className="text-emerald-600 font-bold">✓</span>
                         <span>{req}</span>
                       </li>
                     ))}
@@ -347,38 +445,40 @@ export const WorkView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Application CTA Bar */}
+              {/* Apply Action Buttons */}
               <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="text-xs text-slate-500">
-                  <p className="font-semibold text-slate-800">
-                    Applying as: {userProfile.fullName || 'Comfort Nyoni'} ({userProfile.phone})
-                  </p>
-                  <p className="text-[11px] text-slate-400">
-                    Works offline: Drafts are saved to your phone and sent when connected.
-                  </p>
-                </div>
+                <span className="text-xs text-slate-500">
+                  Contact method: {activeJob.contactMethod}
+                </span>
 
-                <button
-                  onClick={() => setApplyingJob(activeJob)}
-                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-teal-600 text-white font-bold text-xs hover:bg-teal-700 transition flex items-center justify-center gap-2 shadow-sm"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>1-Click Apply with My Profile</span>
-                </button>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={() => setSelectedJobId(null)}
+                    className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition"
+                  >
+                    Cancel / Back
+                  </button>
+                  <button
+                    onClick={() => setApplyingJob(activeJob)}
+                    className="flex-1 sm:flex-initial px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs transition"
+                  >
+                    1-Click Fast Apply
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
             <>
-              {/* Search & Location Filter Bar */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex-1 relative">
-                  <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+              {/* Search and Filters */}
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
                   <input
                     type="text"
                     value={jobSearch}
                     onChange={(e) => setJobSearch(e.target.value)}
-                    placeholder="Search by job title, company, or suburb..."
-                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:outline-none focus:border-teal-500"
+                    placeholder="Filter by job role, skill, or suburb..."
+                    className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-teal-500"
                   />
                 </div>
 
@@ -391,8 +491,6 @@ export const WorkView: React.FC = () => {
                     <option value="All">All Cities</option>
                     <option value="Bulawayo">Bulawayo</option>
                     <option value="Harare">Harare</option>
-                    <option value="Gweru">Gweru</option>
-                    <option value="Mutare">Mutare</option>
                   </select>
 
                   <select
@@ -498,12 +596,13 @@ export const WorkView: React.FC = () => {
       {workSubTab === 'gigs' && (
         <div className="space-y-5">
           {/* Trade Category Tabs */}
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             {[
               { id: 'All', label: 'All Artisans' },
               { id: 'Plumbing', label: 'Plumbing & Electrical' },
               { id: 'Phone', label: 'Phone & Tech Repairs' },
               { id: 'Tailoring', label: 'Tailoring & Carpentry' },
+              { id: 'Welding', label: 'Welding & Steel' },
               { id: 'Cleaning', label: 'Cleaning & Domestic' }
             ].map((cat) => (
               <button
@@ -604,6 +703,9 @@ export const WorkView: React.FC = () => {
                       src={worker.avatarUrl}
                       alt={worker.name}
                       className="w-14 h-14 rounded-2xl object-cover border border-slate-200 shrink-0"
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
+                      }}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
@@ -650,22 +752,29 @@ export const WorkView: React.FC = () => {
 
                 <div className="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-bold uppercase">Rate</span>
-                    <span className="text-xs font-bold text-slate-900 tabular-nums">
-                      {worker.baseRateText}
-                    </span>
+                    <span className="text-[10px] text-slate-400 block font-medium">Starting Rate</span>
+                    <span className="text-xs font-bold text-slate-900">{worker.baseRateText}</span>
                   </div>
 
-                  <button
-                    onClick={() => {
-                      setSelectedWorkerForRequest(worker);
-                      setTaskCategory(worker.serviceCategory);
-                      setShowPostGigModal(true);
-                    }}
-                    className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition shadow-xs"
-                  >
-                    Request Quote
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <a
+                      href={`tel:${worker.phone}`}
+                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                      title="Direct Call"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                    </a>
+                    <button
+                      onClick={() => {
+                        setSelectedWorkerForRequest(worker);
+                        setTaskCategory(worker.serviceCategory);
+                        setShowPostGigModal(true);
+                      }}
+                      className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition"
+                    >
+                      Hire Artisan
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -673,7 +782,146 @@ export const WorkView: React.FC = () => {
         </div>
       )}
 
-      {/* ================= APPLY MODAL ================= */}
+      {/* ================= CREATE ARTISAN PROFILE MODAL (Requirement 3) ================= */}
+      {showCreateArtisanModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <form onSubmit={handleCreateArtisan} className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-teal-600" />
+                  Register as an Artisan / Gig Worker
+                </h3>
+                <p className="text-xs text-slate-500">
+                  List your skills and start receiving local job requests across Zimbabwe
+                </p>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowCreateArtisanModal(false)} 
+                className="p-1 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Full Name / Trade Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={artisanName}
+                    onChange={(e) => setArtisanName(e.target.value)}
+                    placeholder="e.g. Tendai Moyo / Moyo Electricals"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Phone Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={artisanPhone}
+                    onChange={(e) => setArtisanPhone(e.target.value)}
+                    placeholder="e.g. +263 77 123 4567"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Trade / Service Category *</label>
+                  <select
+                    value={artisanCategory}
+                    onChange={(e) => setArtisanCategory(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-teal-500 font-medium"
+                  >
+                    <option value="Plumbing & electrical work">Plumbing &amp; Electrical</option>
+                    <option value="Welding & steel fabrication">Welding &amp; Steel Fabrication</option>
+                    <option value="Phone & electronics repair">Phone &amp; Electronics Repair</option>
+                    <option value="Bricklaying & masonry construction">Bricklaying &amp; Masonry</option>
+                    <option value="Carpentry, roofing & woodwork">Carpentry &amp; Woodwork</option>
+                    <option value="Motor mechanics & servicing">General Motor Mechanics</option>
+                    <option value="Solar PV installation">Solar PV Installation</option>
+                    <option value="Tailoring & fashion design">Tailoring &amp; Fashion</option>
+                    <option value="Domestic cleaning & painting">Cleaning &amp; Domestic Work</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Suburb / City *</label>
+                  <input
+                    type="text"
+                    required
+                    value={artisanSuburb}
+                    onChange={(e) => setArtisanSuburb(e.target.value)}
+                    placeholder="e.g. Nkulumane, Bulawayo"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Starting / Base Rate Text *</label>
+                <input
+                  type="text"
+                  required
+                  value={artisanRate}
+                  onChange={(e) => setArtisanRate(e.target.value)}
+                  placeholder="e.g. $15 / visit + quotation or $25 / day"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Specific Skills (comma-separated)</label>
+                <input
+                  type="text"
+                  value={artisanSkills}
+                  onChange={(e) => setArtisanSkills(e.target.value)}
+                  placeholder="e.g. Inverter Wiring, Geyser Repair, Solar Panels, DB Troubleshooting"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">About Your Services &amp; Experience</label>
+                <textarea
+                  rows={3}
+                  value={artisanAbout}
+                  onChange={(e) => setArtisanAbout(e.target.value)}
+                  placeholder="Describe your practical background, tools you carry, and warranty on work..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              <div className="p-3 bg-teal-50 rounded-xl border border-teal-200 text-teal-900 text-[11px]">
+                <strong>Offline-First Guarantee: </strong> Your artisan profile will be saved on your device and synchronized to the Zimbabwe local network once connectivity is active.
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowCreateArtisanModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition"
+              >
+                Cancel / Back
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition shadow-xs"
+              >
+                Publish Artisan Profile
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ================= APPLY TO JOB MODAL ================= */}
       {applyingJob && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4">
@@ -688,13 +936,6 @@ export const WorkView: React.FC = () => {
             </div>
 
             <div className="space-y-3 text-xs">
-              <div className="p-3 bg-slate-50 rounded-xl space-y-1">
-                <p><strong className="text-slate-800">Applicant: </strong>{userProfile.fullName || 'Comfort Nyoni'}</p>
-                <p><strong className="text-slate-800">Contact: </strong>{userProfile.phone} · {userProfile.email}</p>
-                <p><strong className="text-slate-800">Location: </strong>{userProfile.suburb}, {userProfile.city}</p>
-                <p><strong className="text-slate-800">Verified Skills: </strong>{userProfile.skills.slice(0, 3).join(', ')}</p>
-              </div>
-
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
                   Intro Note / Application Message
@@ -719,7 +960,7 @@ export const WorkView: React.FC = () => {
                 onClick={() => setApplyingJob(null)}
                 className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50"
               >
-                Cancel
+                Cancel / Back
               </button>
               <button
                 onClick={() => handleApplyToJob(applyingJob)}
@@ -824,7 +1065,7 @@ export const WorkView: React.FC = () => {
                 onClick={() => setShowPostJobModal(false)}
                 className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold"
               >
-                Cancel
+                Cancel / Back
               </button>
               <button
                 type="submit"
@@ -917,7 +1158,7 @@ export const WorkView: React.FC = () => {
                 }}
                 className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold"
               >
-                Cancel
+                Cancel / Back
               </button>
               <button
                 type="submit"

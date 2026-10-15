@@ -16,21 +16,45 @@ export interface QuizQuestion {
   explanation: string;
 }
 
+export interface StudyResource {
+  title: string;
+  type: 'cheatsheet' | 'checklist' | 'formula' | 'specification' | 'guide';
+  description: string;
+  keyPoints: string[];
+}
+
+export interface VisualIllustration {
+  id: string;
+  title: string;
+  caption: string;
+  svgType: 'circuit' | 'safety' | 'diagram' | 'process' | 'tools' | 'mechanics';
+  steps?: string[];
+}
+
 export interface CourseLesson {
   id: string;
   title: string;
   durationMinutes: number;
   storageMb: number;
   content: string[]; // Step by step practical instructions
+  detailedNotes?: {
+    overview: string;
+    corePrinciples: string[];
+    safetyProtocols?: string[];
+    troubleshootingTips?: string[];
+    zimbabweContext?: string;
+  };
+  visualDiagram?: VisualIllustration;
   practicalTip: string;
   audioSummary?: string;
+  resources?: StudyResource[];
   quiz?: QuizQuestion[];
 }
 
 export interface Course {
   id: string;
   title: string;
-  category: 'digital' | 'technical' | 'home' | 'entrepreneurship' | 'digital_work' | 'finance' | 'agriculture';
+  category: 'digital' | 'technical' | 'home' | 'entrepreneurship' | 'finance' | 'safety' | 'construction' | 'agriculture';
   categoryLabel: string;
   description: string;
   durationHours: number;
@@ -48,6 +72,7 @@ export interface Course {
     suggestedPricing: string;
     firstCustomerStrategy: string;
   };
+  comprehensiveQuiz?: QuizQuestion[];
 }
 
 export interface Certificate {
@@ -58,6 +83,16 @@ export interface Certificate {
   dateEarned: string;
   scorePercent: number;
   verificationCode: string;
+  userId?: string;
+}
+
+export interface CourseProgress {
+  courseId: string;
+  completedLessonIds: string[];
+  quizScores: Record<string, number>; // quizId/lessonId -> percent
+  highestScore: number;
+  isCertified: boolean;
+  certifiedAt?: string;
 }
 
 export interface JobVacancy {
@@ -91,10 +126,12 @@ export interface JobApplication {
   appliedDate: string;
   status: 'draft' | 'queued' | 'submitted' | 'shortlisted' | 'rejected' | 'hired';
   syncStatus: SyncState;
+  userId?: string;
 }
 
 export interface GigWorker {
   id: string;
+  userId?: string;
   name: string;
   avatarUrl: string;
   serviceCategory: string;
@@ -139,6 +176,7 @@ export interface GigRequest {
 
 export interface BusinessTransaction {
   id: string;
+  userId?: string;
   type: 'sale' | 'expense' | 'gig_payment';
   amount: number;
   currency: CurrencyType;
@@ -153,6 +191,7 @@ export interface BusinessTransaction {
 
 export interface InventoryItem {
   id: string;
+  userId?: string;
   name: string;
   category: string;
   quantity: number;
@@ -165,6 +204,7 @@ export interface InventoryItem {
 
 export interface CustomerCredit {
   id: string;
+  userId?: string;
   customerName: string;
   phone: string;
   amountOwed: number;
@@ -187,6 +227,7 @@ export interface UserProfile {
   skills: string[];
   references: string;
   roles: Array<'learner' | 'jobseeker' | 'worker' | 'employer' | 'business_owner'>;
+  avatarUrl?: string;
   isWorkerProfileActive: boolean;
   workerTrade?: string;
   workerRate?: string;

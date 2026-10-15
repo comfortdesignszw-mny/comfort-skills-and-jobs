@@ -18,14 +18,16 @@ import {
   Calendar,
   X,
   Sparkles,
-  ArrowUpRight
+  ArrowUpRight,
+  ChevronLeft,
+  Lock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { StorageEngine } from '../db/storage';
 import { BusinessTransaction, InventoryItem, CustomerCredit, CurrencyType } from '../types';
 
 export const BusinessView: React.FC = () => {
-  const { currency, toggleCurrency, showToast } = useApp();
+  const { currency, toggleCurrency, showToast, setActiveTab, currentUser, setShowAuthModal } = useApp();
 
   const transactions = StorageEngine.getTransactions();
   const inventory = StorageEngine.getInventory();
@@ -177,20 +179,53 @@ export const BusinessView: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 pb-24 space-y-6">
-      {/* Small Business Header with trader photo */}
+      {/* Top Navigation Back Button */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setActiveTab('home')}
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-teal-700 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-2xs transition active:scale-95"
+        >
+          <ChevronLeft className="w-4 h-4" /> Back to Home
+        </button>
+        <button
+          onClick={toggleCurrency}
+          className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl flex items-center gap-1"
+        >
+          <Coins className="w-3.5 h-3.5" />
+          Currency: {currency} (Switch)
+        </button>
+      </div>
+
+      {/* Account Privacy & Protection Shield when Logged Out */}
+      {!currentUser && (
+        <div className="bg-gradient-to-r from-slate-900 to-teal-950 text-white rounded-3xl p-5 sm:p-6 border border-teal-800/40 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 text-[10px] font-extrabold uppercase tracking-wider">
+              <Lock className="w-3 h-3" /> Account-Secured Privacy
+            </div>
+            <h3 className="text-base font-bold text-white">
+              Private Cashbook &amp; Debtor Ledger Protected
+            </h3>
+            <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+              In accordance with security standards, private transactions, cashbooks, and customer credit books are secured to your personal account. Sign in to access your business ledger.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowAuthModal(true)}
+            className="px-4 py-2.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition whitespace-nowrap self-start sm:self-auto"
+          >
+            Sign In to Access Ledger
+          </button>
+        </div>
+      )}
+
+      {/* Small Business Header with trader photo (Production Cloudflare path) */}
       <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
         <div className="space-y-1.5 max-w-xl">
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-teal-600">
               Module Four · Small Business Tools
             </span>
-            <button
-              onClick={toggleCurrency}
-              className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded flex items-center gap-1"
-            >
-              <Coins className="w-3 h-3" />
-              Currency: {currency} (Switch)
-            </button>
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-slate-900">
             Tuckshop &amp; Artisan Cashbook
@@ -200,12 +235,15 @@ export const BusinessView: React.FC = () => {
           </p>
         </div>
 
-        <div className="w-full md:w-64 h-36 rounded-2xl overflow-hidden shrink-0 border border-slate-200">
+        <div className="w-full md:w-64 h-36 rounded-2xl overflow-hidden shrink-0 border border-slate-200 shadow-xs">
           <img
-            src="/src/assets/images/business_tuckshop_trader_1791981121618.jpg"
+            src="/images/hero_business.jpg"
             alt="Bulawayo tuckshop owner recording cash ledger"
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.src = 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=600&auto=format&fit=crop&q=80';
+            }}
           />
         </div>
       </div>
