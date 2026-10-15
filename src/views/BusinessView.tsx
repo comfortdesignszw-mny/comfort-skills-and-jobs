@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Store, 
   Plus, 
@@ -29,9 +29,18 @@ import { BusinessTransaction, InventoryItem, CustomerCredit, CurrencyType } from
 export const BusinessView: React.FC = () => {
   const { currency, toggleCurrency, showToast, setActiveTab, currentUser, setShowAuthModal } = useApp();
 
-  const transactions = StorageEngine.getTransactions();
-  const inventory = StorageEngine.getInventory();
-  const customerCredits = StorageEngine.getCustomerCredits();
+  // Reactive subscription to StorageEngine for instant updates when transactions/sales are recorded
+  const [dataVersion, setDataVersion] = useState(0);
+  useEffect(() => {
+    return StorageEngine.subscribe(() => {
+      setDataVersion((v) => v + 1);
+    });
+  }, []);
+
+  const isLoggedIn = !!currentUser || StorageEngine.isUserLoggedIn();
+  const transactions: BusinessTransaction[] = useMemo(() => StorageEngine.getTransactions(), [dataVersion, currentUser]);
+  const inventory: InventoryItem[] = useMemo(() => StorageEngine.getInventory(), [dataVersion, currentUser]);
+  const customerCredits: CustomerCredit[] = useMemo(() => StorageEngine.getCustomerCredits(), [dataVersion, currentUser]);
 
   // Active Tab within Business
   const [bizTab, setBizTab] = useState<'cashbook' | 'inventory' | 'debtors' | 'reports'>('cashbook');
@@ -196,28 +205,34 @@ export const BusinessView: React.FC = () => {
         </button>
       </div>
 
-      {/* Account Privacy & Protection Shield when Logged Out */}
-      {!currentUser && (
-        <div className="bg-gradient-to-r from-slate-900 to-teal-950 text-white rounded-3xl p-5 sm:p-6 border border-teal-800/40 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 text-[10px] font-extrabold uppercase tracking-wider">
-              <Lock className="w-3 h-3" /> Account-Secured Privacy
-            </div>
-            <h3 className="text-base font-bold text-white">
-              Private Cashbook &amp; Debtor Ledger Protected
-            </h3>
-            <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-              In accordance with security standards, private transactions, cashbooks, and customer credit books are secured to your personal account. Sign in to access your business ledger.
+      {/* Unified Cloud Sync & Persistence Indicator */}
+      <div className={`p-4 rounded-2xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+        isLoggedIn 
+          ? 'bg-teal-50/70 border-teal-200 text-teal-900' 
+          : 'bg-slate-50 border-slate-200 text-slate-700'
+      }`}>
+        <div className="flex items-center gap-2.5">
+          <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isLoggedIn ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`} />
+          <div>
+            <span className="font-bold">
+              {isLoggedIn ? 'Cloud Database Active & Synced' : 'Offline Cashbook Mode'}
+            </span>
+            <p className="text-[11px] opacity-80 mt-0.5">
+              {isLoggedIn 
+                ? 'All business sales, expenses, inventory, and customer debts are automatically persisted to your account and backed up to the cloud.' 
+                : 'All transactions are immediately saved to this device. Sign in anytime to sync and back up your ledger to the online database.'}
             </p>
           </div>
+        </div>
+        {!isLoggedIn && (
           <button
             onClick={() => setShowAuthModal(true)}
-            className="px-4 py-2.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition whitespace-nowrap self-start sm:self-auto"
+            className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-2xs whitespace-nowrap self-start sm:self-auto transition"
           >
-            Sign In to Access Ledger
+            Sign In to Sync
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Small Business Header with trader photo (Production Cloudflare path) */}
       <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">

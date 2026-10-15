@@ -69,7 +69,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Storage derived state
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     return StorageEngine.subscribe(() => {
       setTick((t) => t + 1);
@@ -274,7 +274,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser,
       authLoading,
       showAuthModal,
-      greetingText
+      greetingText,
+      tick
     ]
   );
 

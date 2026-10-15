@@ -15,10 +15,20 @@ import {
   doc, 
   setDoc, 
   getDoc,
+  collection,
+  getDocs,
+  deleteDoc,
   serverTimestamp 
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { UserProfile } from './types';
+import { 
+  UserProfile, 
+  BusinessTransaction, 
+  InventoryItem, 
+  CustomerCredit, 
+  GigWorker, 
+  GigRequest 
+} from './types';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
@@ -159,6 +169,169 @@ export async function saveUserProfileToFirestore(userId: string, data: Partial<U
     }, { merge: true });
   } catch (error) {
     console.warn('Could not save profile to remote Firestore (offline or rule error):', error);
+  }
+}
+
+// ================= FIRESTORE CLOUD OPERATIONS =================
+export async function saveTransactionToFirestore(userId: string, tx: BusinessTransaction): Promise<void> {
+  try {
+    const txRef = doc(db, 'users', userId, 'transactions', tx.id);
+    await setDoc(txRef, {
+      ...tx,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    console.warn('Could not sync transaction to cloud:', error);
+  }
+}
+
+export async function deleteTransactionFromFirestore(userId: string, txId: string): Promise<void> {
+  try {
+    const txRef = doc(db, 'users', userId, 'transactions', txId);
+    await deleteDoc(txRef);
+  } catch (error) {
+    console.warn('Could not delete transaction from cloud:', error);
+  }
+}
+
+export async function fetchTransactionsFromFirestore(userId: string): Promise<BusinessTransaction[]> {
+  try {
+    const colRef = collection(db, 'users', userId, 'transactions');
+    const snap = await getDocs(colRef);
+    const results: BusinessTransaction[] = [];
+    snap.forEach((d) => {
+      results.push(d.data() as BusinessTransaction);
+    });
+    return results;
+  } catch (error) {
+    console.warn('Could not fetch transactions from cloud:', error);
+    return [];
+  }
+}
+
+export async function saveInventoryItemToFirestore(userId: string, item: InventoryItem): Promise<void> {
+  try {
+    const itemRef = doc(db, 'users', userId, 'inventory', item.id);
+    await setDoc(itemRef, {
+      ...item,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    console.warn('Could not sync inventory item to cloud:', error);
+  }
+}
+
+export async function deleteInventoryItemFromFirestore(userId: string, itemId: string): Promise<void> {
+  try {
+    const itemRef = doc(db, 'users', userId, 'inventory', itemId);
+    await deleteDoc(itemRef);
+  } catch (error) {
+    console.warn('Could not delete inventory item from cloud:', error);
+  }
+}
+
+export async function fetchInventoryFromFirestore(userId: string): Promise<InventoryItem[]> {
+  try {
+    const colRef = collection(db, 'users', userId, 'inventory');
+    const snap = await getDocs(colRef);
+    const results: InventoryItem[] = [];
+    snap.forEach((d) => {
+      results.push(d.data() as InventoryItem);
+    });
+    return results;
+  } catch (error) {
+    console.warn('Could not fetch inventory from cloud:', error);
+    return [];
+  }
+}
+
+export async function saveCustomerCreditToFirestore(userId: string, credit: CustomerCredit): Promise<void> {
+  try {
+    const creditRef = doc(db, 'users', userId, 'credits', credit.id);
+    await setDoc(creditRef, {
+      ...credit,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    console.warn('Could not sync customer credit to cloud:', error);
+  }
+}
+
+export async function deleteCustomerCreditFromFirestore(userId: string, creditId: string): Promise<void> {
+  try {
+    const creditRef = doc(db, 'users', userId, 'credits', creditId);
+    await deleteDoc(creditRef);
+  } catch (error) {
+    console.warn('Could not delete customer credit from cloud:', error);
+  }
+}
+
+export async function fetchCustomerCreditsFromFirestore(userId: string): Promise<CustomerCredit[]> {
+  try {
+    const colRef = collection(db, 'users', userId, 'credits');
+    const snap = await getDocs(colRef);
+    const results: CustomerCredit[] = [];
+    snap.forEach((d) => {
+      results.push(d.data() as CustomerCredit);
+    });
+    return results;
+  } catch (error) {
+    console.warn('Could not fetch customer credits from cloud:', error);
+    return [];
+  }
+}
+
+export async function saveArtisanToFirestore(worker: GigWorker): Promise<void> {
+  try {
+    const workerRef = doc(db, 'artisans', worker.id);
+    await setDoc(workerRef, {
+      ...worker,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    console.warn('Could not sync artisan to cloud:', error);
+  }
+}
+
+export async function fetchArtisansFromFirestore(): Promise<GigWorker[]> {
+  try {
+    const colRef = collection(db, 'artisans');
+    const snap = await getDocs(colRef);
+    const results: GigWorker[] = [];
+    snap.forEach((d) => {
+      results.push(d.data() as GigWorker);
+    });
+    return results;
+  } catch (error) {
+    console.warn('Could not fetch artisans from cloud:', error);
+    return [];
+  }
+}
+
+export async function saveGigRequestToFirestore(gig: GigRequest): Promise<void> {
+  try {
+    const gigRef = doc(db, 'gigs', gig.id);
+    await setDoc(gigRef, {
+      ...gig,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    console.warn('Could not sync gig request to cloud:', error);
+  }
+}
+
+export async function fetchGigRequestsFromFirestore(): Promise<GigRequest[]> {
+  try {
+    const colRef = collection(db, 'gigs');
+    const snap = await getDocs(colRef);
+    const results: GigRequest[] = [];
+    snap.forEach((d) => {
+      results.push(d.data() as GigRequest);
+    });
+    return results;
+  } catch (error) {
+    console.warn('Could not fetch gig requests from cloud:', error);
+    return [];
   }
 }
 

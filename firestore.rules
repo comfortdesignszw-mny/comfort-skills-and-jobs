@@ -18,6 +18,18 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if isOwner(userId);
       allow delete: if isOwner(userId);
+
+      match /transactions/{txId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /inventory/{invId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /credits/{creditId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     match /artisans/{workerId} {

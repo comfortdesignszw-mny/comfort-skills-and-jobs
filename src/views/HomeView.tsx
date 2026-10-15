@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, 
   GraduationCap, 
@@ -34,10 +34,17 @@ export const HomeView: React.FC = () => {
     setShowAuthModal
   } = useApp();
 
-  const courses = StorageEngine.getCourses();
-  const jobs = StorageEngine.getJobs().slice(0, 3);
-  const workers = StorageEngine.getWorkers().slice(0, 3);
-  const transactions = StorageEngine.getTransactions();
+  const [dataVersion, setDataVersion] = useState(0);
+  useEffect(() => {
+    return StorageEngine.subscribe(() => {
+      setDataVersion((v) => v + 1);
+    });
+  }, []);
+
+  const courses = useMemo(() => StorageEngine.getCourses(), [dataVersion]);
+  const jobs = useMemo(() => StorageEngine.getJobs().slice(0, 3), [dataVersion]);
+  const workers = useMemo(() => StorageEngine.getWorkers().slice(0, 3), [dataVersion]);
+  const transactions = useMemo(() => StorageEngine.getTransactions(), [dataVersion, currentUser]);
 
   // Quick business stats
   const totalSales = transactions

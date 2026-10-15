@@ -1359,53 +1359,9 @@ export const INITIAL_GIG_WORKERS: GigWorker[] = [];
 
 export const INITIAL_TRANSACTIONS: BusinessTransaction[] = [];
 
-export const INITIAL_INVENTORY: InventoryItem[] = [
-  {
-    id: 'inv-1',
-    name: 'Universal Smartphone Screen Adhesive (B-7000 50ml)',
-    category: 'Spares & Consumables',
-    quantity: 6,
-    unitCost: 2.5,
-    sellingPrice: 5.0,
-    currency: 'USD',
-    lowStockAlert: 2,
-    lastUpdated: '2026-10-14'
-  },
-  {
-    id: 'inv-2',
-    name: 'Type-C Charging Sub-board (Samsung/Redmi)',
-    category: 'Spares & Consumables',
-    quantity: 4,
-    unitCost: 3.0,
-    sellingPrice: 8.0,
-    currency: 'USD',
-    lowStockAlert: 2,
-    lastUpdated: '2026-10-14'
-  },
-  {
-    id: 'inv-3',
-    name: 'Solar DC 16A Circuit Breaker (2-Pole)',
-    category: 'Solar Equipment',
-    quantity: 3,
-    unitCost: 5.0,
-    sellingPrice: 10.0,
-    currency: 'USD',
-    lowStockAlert: 2,
-    lastUpdated: '2026-10-13'
-  }
-];
+export const INITIAL_INVENTORY: InventoryItem[] = [];
 
-export const INITIAL_CUSTOMER_CREDITS: CustomerCredit[] = [
-  {
-    id: 'cred-1',
-    customerName: 'Tendai Marufu',
-    phone: '+263 77 412 9081',
-    amountOwed: 15.0,
-    currency: 'USD',
-    lastPurchaseDate: '2026-10-12',
-    notes: 'Promised to pay balance upon month-end pay date (25th)'
-  }
-];
+export const INITIAL_CUSTOMER_CREDITS: CustomerCredit[] = [];
 
 export const DEFAULT_USER_PROFILE: UserProfile = {
   id: 'guest',

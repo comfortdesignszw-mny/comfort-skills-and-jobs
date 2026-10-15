@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Briefcase, 
   Handshake, 
@@ -42,10 +42,17 @@ export const WorkView: React.FC = () => {
     setShowAuthModal
   } = useApp();
 
-  const jobs = StorageEngine.getJobs();
-  const applications = StorageEngine.getApplications();
-  const workers = StorageEngine.getWorkers();
-  const gigRequests = StorageEngine.getGigRequests();
+  const [dataVersion, setDataVersion] = useState(0);
+  useEffect(() => {
+    return StorageEngine.subscribe(() => {
+      setDataVersion((v) => v + 1);
+    });
+  }, []);
+
+  const jobs = useMemo(() => StorageEngine.getJobs(), [dataVersion]);
+  const applications = useMemo(() => StorageEngine.getApplications(), [dataVersion, currentUser]);
+  const workers = useMemo(() => StorageEngine.getWorkers(), [dataVersion]);
+  const gigRequests = useMemo(() => StorageEngine.getGigRequests(), [dataVersion]);
 
   // Filters & State
   const [jobSearch, setJobSearch] = useState('');

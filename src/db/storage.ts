@@ -21,16 +21,32 @@ import {
   INITIAL_CUSTOMER_CREDITS, 
   DEFAULT_USER_PROFILE 
 } from './initialData';
+import {
+  saveUserProfileToFirestore,
+  saveTransactionToFirestore,
+  deleteTransactionFromFirestore,
+  fetchTransactionsFromFirestore,
+  saveInventoryItemToFirestore,
+  deleteInventoryItemFromFirestore,
+  fetchInventoryFromFirestore,
+  saveCustomerCreditToFirestore,
+  deleteCustomerCreditFromFirestore,
+  fetchCustomerCreditsFromFirestore,
+  saveArtisanToFirestore,
+  fetchArtisansFromFirestore,
+  saveGigRequestToFirestore,
+  fetchGigRequestsFromFirestore
+} from '../firebase';
 
 const PUBLIC_STORAGE_KEYS = {
   COURSES: 'comfort_hub_courses_v3',
   JOBS: 'comfort_hub_jobs_v3',
-  WORKERS: 'comfort_hub_workers_v3',
-  GIG_REQUESTS: 'comfort_hub_gig_requests_v3',
+  WORKERS: 'comfort_hub_workers_v4',
+  GIG_REQUESTS: 'comfort_hub_gig_requests_v4',
   FORCE_OFFLINE: 'comfort_hub_force_offline_mode',
   CURRENCY: 'comfort_hub_preferred_currency',
   LANGUAGE: 'comfort_hub_preferred_lang',
-  APP_INITIALIZED: 'comfort_hub_is_initialized_v3',
+  APP_INITIALIZED: 'comfort_hub_is_initialized_v4',
   ACTIVE_USER_ID: 'comfort_hub_active_user_id'
 };
 
@@ -63,6 +79,11 @@ export const StorageEngine = {
       localStorage.setItem(PUBLIC_STORAGE_KEYS.ACTIVE_USER_ID, uid);
       // Initialize user's private storage containers if first time
       this.initUserDataIfEmpty(uid);
+      // Migrate any guest actions performed before logging in
+      this.migrateGuestDataToUser(uid);
+      // Perform background cloud synchronization
+      this.syncUserDataWithCloud(uid);
+      this.syncPublicDataWithCloud();
     } else {
       localStorage.removeItem(PUBLIC_STORAGE_KEYS.ACTIVE_USER_ID);
     }
@@ -84,7 +105,211 @@ export const StorageEngine = {
     return `comfort_hub_user_${uid}_${suffix}`;
   },
 
+  /**
+   * Complete one-time purge of legacy development sample data so production app starts clean
+   */
+  purgeSampleData() {
+    try {
+      const isClean = localStorage.getItem('comfort_hub_clean_prod_v6_purged');
+      if (isClean) return;
+
+      // Clean old worker keys and filter out seeded names / IDs
+      ['comfort_hub_workers', 'comfort_hub_workers_v1', 'comfort_hub_workers_v2', 'comfort_hub_workers_v3'].forEach((k) => localStorage.removeItem(k));
+      ['comfort_hub_gig_requests', 'comfort_hub_gig_requests_v1', 'comfort_hub_gig_requests_v2', 'comfort_hub_gig_requests_v3'].forEach((k) => localStorage.removeItem(k));
+
+      // Sanitize workers
+      const rawWorkers = localStorage.getItem(PUBLIC_STORAGE_KEYS.WORKERS);
+      if (rawWorkers) {
+        try {
+          const workers: GigWorker[] = JSON.parse(rawWorkers);
+          const sanitized = workers.filter((w) => !w.id.startsWith('worker-') && !['Sipho Moyo', 'Tendai Chideme', 'Blessing Ncube', 'Farai Gumbo', 'Nomsa Dube', 'Tatenda Ndlovu'].includes(w.name));
+          localStorage.setItem(PUBLIC_STORAGE_KEYS.WORKERS, JSON.stringify(sanitized));
+        } catch {
+          localStorage.setItem(PUBLIC_STORAGE_KEYS.WORKERS, JSON.stringify([]));
+        }
+      } else {
+        localStorage.setItem(PUBLIC_STORAGE_KEYS.WORKERS, JSON.stringify([]));
+      }
+
+      // Sanitize gig requests
+      const rawGigs = localStorage.getItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS);
+      if (rawGigs) {
+        try {
+          const gigs: GigRequest[] = JSON.parse(rawGigs);
+          const sanitized = gigs.filter((g) => !g.id.startsWith('gig-1') && !g.id.startsWith('gig-2') && !g.id.startsWith('gig-3'));
+          localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify(sanitized));
+        } catch {
+          localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify([]));
+        }
+      } else {
+        localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify([]));
+      }
+
+      // Scan all localStorage keys for old mock transactions, inventory, credits
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('comfort_hub')) {
+          if (key.endsWith('_transactions')) {
+            try {
+              const txs: BusinessTransaction[] = JSON.parse(localStorage.getItem(key) || '[]');
+              const sanitized = txs.filter((t) => !['tx-1', 'tx-2', 'tx-3', 'tx-4', 'tx-5'].includes(t.id));
+              localStorage.setItem(key, JSON.stringify(sanitized));
+            } catch {}
+          } else if (key.endsWith('_inventory')) {
+            try {
+              const inv: InventoryItem[] = JSON.parse(localStorage.getItem(key) || '[]');
+              const sanitized = inv.filter((item) => !['inv-1', 'inv-2', 'inv-3'].includes(item.id));
+              localStorage.setItem(key, JSON.stringify(sanitized));
+            } catch {}
+          } else if (key.endsWith('_credits')) {
+            try {
+              const creds: CustomerCredit[] = JSON.parse(localStorage.getItem(key) || '[]');
+              const sanitized = creds.filter((c) => !['cred-1'].includes(c.id));
+              localStorage.setItem(key, JSON.stringify(sanitized));
+            } catch {}
+          }
+        }
+      }
+
+      localStorage.setItem('comfort_hub_clean_prod_v6_purged', 'true');
+    } catch (e) {
+      console.warn('Sample data purge failed:', e);
+    }
+  },
+
+  /**
+   * Seamlessly migrate guest actions (transactions, inventory, credits) to user account upon login
+   */
+  migrateGuestDataToUser(uid: string) {
+    try {
+      const guestTxKey = 'comfort_hub_guest_transactions';
+      const guestTxsRaw = localStorage.getItem(guestTxKey);
+      if (guestTxsRaw) {
+        const guestTxs: BusinessTransaction[] = JSON.parse(guestTxsRaw);
+        if (guestTxs.length > 0) {
+          const userKey = `comfort_hub_user_${uid}_transactions`;
+          const userTxsRaw = localStorage.getItem(userKey);
+          const userTxs: BusinessTransaction[] = userTxsRaw ? JSON.parse(userTxsRaw) : [];
+          const merged = [...guestTxs.map((t) => ({ ...t, userId: uid })), ...userTxs];
+          localStorage.setItem(userKey, JSON.stringify(merged));
+          localStorage.removeItem(guestTxKey);
+          guestTxs.forEach((tx) => saveTransactionToFirestore(uid, { ...tx, userId: uid }));
+        }
+      }
+
+      const guestInvKey = 'comfort_hub_guest_inventory';
+      const guestInvRaw = localStorage.getItem(guestInvKey);
+      if (guestInvRaw) {
+        const guestInv: InventoryItem[] = JSON.parse(guestInvRaw);
+        if (guestInv.length > 0) {
+          const userKey = `comfort_hub_user_${uid}_inventory`;
+          const userInvRaw = localStorage.getItem(userKey);
+          const userInv: InventoryItem[] = userInvRaw ? JSON.parse(userInvRaw) : [];
+          const merged = [...guestInv.map((item) => ({ ...item, userId: uid })), ...userInv];
+          localStorage.setItem(userKey, JSON.stringify(merged));
+          localStorage.removeItem(guestInvKey);
+          guestInv.forEach((item) => saveInventoryItemToFirestore(uid, { ...item, userId: uid }));
+        }
+      }
+
+      const guestCredKey = 'comfort_hub_guest_credits';
+      const guestCredRaw = localStorage.getItem(guestCredKey);
+      if (guestCredRaw) {
+        const guestCreds: CustomerCredit[] = JSON.parse(guestCredRaw);
+        if (guestCreds.length > 0) {
+          const userKey = `comfort_hub_user_${uid}_credits`;
+          const userCredRaw = localStorage.getItem(userKey);
+          const userCreds: CustomerCredit[] = userCredRaw ? JSON.parse(userCredRaw) : [];
+          const merged = [...guestCreds.map((c) => ({ ...c, userId: uid })), ...userCreds];
+          localStorage.setItem(userKey, JSON.stringify(merged));
+          localStorage.removeItem(guestCredKey);
+          guestCreds.forEach((cred) => saveCustomerCreditToFirestore(uid, { ...cred, userId: uid }));
+        }
+      }
+    } catch (e) {
+      console.warn('Guest migration error:', e);
+    }
+  },
+
+  /**
+   * Sync active user's private data with Firestore
+   */
+  async syncUserDataWithCloud(uid: string) {
+    if (!this.isEffectivelyOnline()) return;
+    try {
+      const [remoteTxs, remoteInv, remoteCredits] = await Promise.all([
+        fetchTransactionsFromFirestore(uid),
+        fetchInventoryFromFirestore(uid),
+        fetchCustomerCreditsFromFirestore(uid)
+      ]);
+
+      if (remoteTxs.length > 0) {
+        const localTxs = this.getTransactions();
+        const txMap = new Map<string, BusinessTransaction>();
+        remoteTxs.forEach((t) => txMap.set(t.id, t));
+        localTxs.forEach((t) => txMap.set(t.id, t));
+        localStorage.setItem(`comfort_hub_user_${uid}_transactions`, JSON.stringify(Array.from(txMap.values())));
+      }
+
+      if (remoteInv.length > 0) {
+        const localInv = this.getInventory();
+        const invMap = new Map<string, InventoryItem>();
+        remoteInv.forEach((i) => invMap.set(i.id, i));
+        localInv.forEach((i) => invMap.set(i.id, i));
+        localStorage.setItem(`comfort_hub_user_${uid}_inventory`, JSON.stringify(Array.from(invMap.values())));
+      }
+
+      if (remoteCredits.length > 0) {
+        const localCreds = this.getCustomerCredits();
+        const credMap = new Map<string, CustomerCredit>();
+        remoteCredits.forEach((c) => credMap.set(c.id, c));
+        localCreds.forEach((c) => credMap.set(c.id, c));
+        localStorage.setItem(`comfort_hub_user_${uid}_credits`, JSON.stringify(Array.from(credMap.values())));
+      }
+
+      notifyListeners();
+    } catch (e) {
+      console.warn('User cloud sync error:', e);
+    }
+  },
+
+  /**
+   * Sync public artisans and gigs from Firestore
+   */
+  async syncPublicDataWithCloud() {
+    if (!this.isEffectivelyOnline()) return;
+    try {
+      const [remoteArtisans, remoteGigs] = await Promise.all([
+        fetchArtisansFromFirestore(),
+        fetchGigRequestsFromFirestore()
+      ]);
+
+      if (remoteArtisans.length > 0) {
+        const localArtisans = this.getWorkers();
+        const workerMap = new Map<string, GigWorker>();
+        remoteArtisans.forEach((w) => workerMap.set(w.id, w));
+        localArtisans.forEach((w) => workerMap.set(w.id, w));
+        localStorage.setItem(PUBLIC_STORAGE_KEYS.WORKERS, JSON.stringify(Array.from(workerMap.values())));
+      }
+
+      if (remoteGigs.length > 0) {
+        const localGigs = this.getGigRequests();
+        const gigMap = new Map<string, GigRequest>();
+        remoteGigs.forEach((g) => gigMap.set(g.id, g));
+        localGigs.forEach((g) => gigMap.set(g.id, g));
+        localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify(Array.from(gigMap.values())));
+      }
+
+      notifyListeners();
+    } catch (e) {
+      console.warn('Public cloud sync error:', e);
+    }
+  },
+
   init() {
+    // Purge any stale development mock data
+    this.purgeSampleData();
+
     // Restore active user session if stored
     const storedUser = localStorage.getItem(PUBLIC_STORAGE_KEYS.ACTIVE_USER_ID);
     if (storedUser) {
@@ -101,6 +326,9 @@ export const StorageEngine = {
       localStorage.setItem(PUBLIC_STORAGE_KEYS.LANGUAGE, 'en');
       localStorage.setItem(PUBLIC_STORAGE_KEYS.APP_INITIALIZED, 'true');
     }
+
+    // Trigger cloud synchronization of public data in background
+    this.syncPublicDataWithCloud();
   },
 
   initUserDataIfEmpty(uid: string) {
@@ -337,7 +565,13 @@ export const StorageEngine = {
   // ================= PUBLIC DATA: GIG WORKERS & ARTISANS =================
   getWorkers(): GigWorker[] {
     const raw = localStorage.getItem(PUBLIC_STORAGE_KEYS.WORKERS);
-    return raw ? JSON.parse(raw) : INITIAL_GIG_WORKERS;
+    if (!raw) return [];
+    try {
+      const workers: GigWorker[] = JSON.parse(raw);
+      return workers.filter((w) => !w.id.startsWith('worker-') && !['Sipho Moyo', 'Tendai Chideme', 'Blessing Ncube', 'Farai Gumbo', 'Nomsa Dube', 'Tatenda Ndlovu'].includes(w.name));
+    } catch {
+      return [];
+    }
   },
 
   saveWorker(worker: GigWorker) {
@@ -353,7 +587,7 @@ export const StorageEngine = {
   },
 
   /**
-   * Requirement 3: Allow users to create artisan profiles from Work >> Gigs
+   * Allow users to create artisan profiles with avatar and work showcase photos
    */
   createArtisanProfile(params: {
     name: string;
@@ -366,6 +600,7 @@ export const StorageEngine = {
     skills: string[];
     about: string;
     avatarUrl?: string;
+    sampleWorkPhotos?: string[];
   }): GigWorker {
     const newWorker: GigWorker = {
       id: `artisan-${Date.now()}`,
@@ -385,10 +620,28 @@ export const StorageEngine = {
       phone: params.phone.trim(),
       skills: params.skills.length > 0 ? params.skills : [params.serviceCategory],
       about: params.about.trim(),
-      sampleWorkPhotos: []
+      sampleWorkPhotos: params.sampleWorkPhotos || []
     };
 
     this.saveWorker(newWorker);
+
+    // If logged in, update current user's profile to activate artisan mode
+    if (this.isUserLoggedIn()) {
+      const profile = this.getUserProfile();
+      this.saveUserProfile({
+        ...profile,
+        fullName: profile.fullName || newWorker.name,
+        phone: profile.phone || newWorker.phone,
+        suburb: profile.suburb || newWorker.suburb,
+        isWorkerProfileActive: true,
+        workerTrade: newWorker.serviceCategory,
+        workerRate: newWorker.baseRateText,
+        roles: profile.roles.includes('worker') ? profile.roles : [...profile.roles, 'worker']
+      });
+    }
+
+    this.saveWorker(newWorker);
+    saveArtisanToFirestore(newWorker);
 
     // If logged in, update current user's profile to activate artisan mode
     if (this.isUserLoggedIn()) {
@@ -411,7 +664,13 @@ export const StorageEngine = {
   // ================= PUBLIC DATA: GIG REQUESTS =================
   getGigRequests(): GigRequest[] {
     const raw = localStorage.getItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    try {
+      const gigs: GigRequest[] = JSON.parse(raw);
+      return gigs.filter((g) => !g.id.startsWith('gig-1') && !g.id.startsWith('gig-2') && !g.id.startsWith('gig-3'));
+    } catch {
+      return [];
+    }
   },
 
   createGigRequest(req: Omit<GigRequest, 'id' | 'createdAt' | 'status' | 'syncStatus'>): GigRequest {
@@ -426,6 +685,9 @@ export const StorageEngine = {
     };
     reqs.unshift(newReq);
     localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify(reqs));
+
+    // Sync to Firestore
+    saveGigRequestToFirestore(newReq);
 
     if (!isOnline) {
       this.addToSyncQueue({
@@ -446,12 +708,14 @@ export const StorageEngine = {
     const reqs = this.getGigRequests();
     const updated = reqs.map((r) => {
       if (r.id === id) {
-        return {
+        const item: GigRequest = {
           ...r,
           status,
           quotedAmount: quotedAmount !== undefined ? quotedAmount : r.quotedAmount,
           review: review || r.review
         };
+        saveGigRequestToFirestore(item);
+        return item;
       }
       return r;
     });
@@ -461,36 +725,50 @@ export const StorageEngine = {
 
   // ================= PERSONAL DATA: BUSINESS TRANSACTIONS =================
   getTransactions(): BusinessTransaction[] {
-    if (!this.isUserLoggedIn()) return [];
     const raw = localStorage.getItem(this.getUserKey('transactions'));
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    try {
+      const txs: BusinessTransaction[] = JSON.parse(raw);
+      return txs.filter((t) => !['tx-1', 'tx-2', 'tx-3', 'tx-4', 'tx-5'].includes(t.id));
+    } catch {
+      return [];
+    }
   },
 
   addTransaction(tx: Omit<BusinessTransaction, 'id' | 'syncStatus'>): BusinessTransaction {
+    const uid = this.getActiveUserId();
     const isOnline = this.isEffectivelyOnline();
     const newTx: BusinessTransaction = {
       ...tx,
       id: `tx-${Date.now()}`,
-      userId: this.getActiveUserId() || undefined,
-      syncStatus: isOnline ? 'synced' : 'saved_locally'
+      userId: uid || undefined,
+      syncStatus: (uid && isOnline) ? 'synced' : 'saved_locally'
     };
 
-    if (this.isUserLoggedIn()) {
-      const txs = this.getTransactions();
-      txs.unshift(newTx);
-      localStorage.setItem(this.getUserKey('transactions'), JSON.stringify(txs));
+    const key = this.getUserKey('transactions');
+    const txs = this.getTransactions();
+    txs.unshift(newTx);
+    localStorage.setItem(key, JSON.stringify(txs));
 
-      // If related inventory item exists and it's a sale, reduce quantity
-      if (newTx.type === 'sale' && newTx.relatedInventoryId) {
-        const inv = this.getInventory();
-        const updatedInv = inv.map((item) => {
-          if (item.id === newTx.relatedInventoryId && item.quantity > 0) {
-            return { ...item, quantity: item.quantity - 1 };
+    // If related inventory item exists and it's a sale, reduce quantity
+    if (newTx.type === 'sale' && newTx.relatedInventoryId) {
+      const inv = this.getInventory();
+      const updatedInv = inv.map((item) => {
+        if (item.id === newTx.relatedInventoryId && item.quantity > 0) {
+          const updatedItem = { ...item, quantity: item.quantity - 1, lastUpdated: new Date().toISOString().split('T')[0] };
+          if (uid) {
+            saveInventoryItemToFirestore(uid, updatedItem);
           }
-          return item;
-        });
-        localStorage.setItem(this.getUserKey('inventory'), JSON.stringify(updatedInv));
-      }
+          return updatedItem;
+        }
+        return item;
+      });
+      localStorage.setItem(this.getUserKey('inventory'), JSON.stringify(updatedInv));
+    }
+
+    // Persist immediately to cloud if user is authenticated
+    if (uid) {
+      saveTransactionToFirestore(uid, newTx);
     }
 
     notifyListeners();
@@ -498,28 +776,29 @@ export const StorageEngine = {
   },
 
   deleteTransaction(id: string) {
-    if (!this.isUserLoggedIn()) return;
+    const uid = this.getActiveUserId();
     const txs = this.getTransactions().filter((t) => t.id !== id);
     localStorage.setItem(this.getUserKey('transactions'), JSON.stringify(txs));
+    if (uid) {
+      deleteTransactionFromFirestore(uid, id);
+    }
     notifyListeners();
   },
 
   // ================= PERSONAL DATA: INVENTORY =================
   getInventory(): InventoryItem[] {
-    if (!this.isUserLoggedIn()) return [];
     const raw = localStorage.getItem(this.getUserKey('inventory'));
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    try {
+      const items: InventoryItem[] = JSON.parse(raw);
+      return items.filter((item) => !['inv-1', 'inv-2', 'inv-3'].includes(item.id));
+    } catch {
+      return [];
+    }
   },
 
   saveInventoryItem(item: Omit<InventoryItem, 'id' | 'lastUpdated'> & { id?: string }): InventoryItem {
-    if (!this.isUserLoggedIn()) {
-      return {
-        ...item,
-        id: `inv-${Date.now()}`,
-        lastUpdated: new Date().toISOString().split('T')[0]
-      };
-    }
-
+    const uid = this.getActiveUserId();
     const items = this.getInventory();
     if (item.id) {
       const index = items.findIndex((i) => i.id === item.id);
@@ -527,11 +806,14 @@ export const StorageEngine = {
         const updated: InventoryItem = {
           ...item,
           id: item.id,
-          userId: this.getActiveUserId() || undefined,
+          userId: uid || undefined,
           lastUpdated: new Date().toISOString().split('T')[0]
         };
         items[index] = updated;
         localStorage.setItem(this.getUserKey('inventory'), JSON.stringify(items));
+        if (uid) {
+          saveInventoryItemToFirestore(uid, updated);
+        }
         notifyListeners();
         return updated;
       }
@@ -540,38 +822,42 @@ export const StorageEngine = {
     const newItem: InventoryItem = {
       ...item,
       id: `inv-${Date.now()}`,
-      userId: this.getActiveUserId() || undefined,
+      userId: uid || undefined,
       lastUpdated: new Date().toISOString().split('T')[0]
     };
     items.unshift(newItem);
     localStorage.setItem(this.getUserKey('inventory'), JSON.stringify(items));
+    if (uid) {
+      saveInventoryItemToFirestore(uid, newItem);
+    }
     notifyListeners();
     return newItem;
   },
 
   deleteInventoryItem(id: string) {
-    if (!this.isUserLoggedIn()) return;
+    const uid = this.getActiveUserId();
     const items = this.getInventory().filter((i) => i.id !== id);
     localStorage.setItem(this.getUserKey('inventory'), JSON.stringify(items));
+    if (uid) {
+      deleteInventoryItemFromFirestore(uid, id);
+    }
     notifyListeners();
   },
 
   // ================= PERSONAL DATA: CUSTOMER CREDITS =================
   getCustomerCredits(): CustomerCredit[] {
-    if (!this.isUserLoggedIn()) return [];
     const raw = localStorage.getItem(this.getUserKey('credits'));
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    try {
+      const credits: CustomerCredit[] = JSON.parse(raw);
+      return credits.filter((c) => !['cred-1'].includes(c.id));
+    } catch {
+      return [];
+    }
   },
 
   saveCustomerCredit(credit: Omit<CustomerCredit, 'id' | 'lastPurchaseDate'> & { id?: string }): CustomerCredit {
-    if (!this.isUserLoggedIn()) {
-      return {
-        ...credit,
-        id: `cred-${Date.now()}`,
-        lastPurchaseDate: new Date().toISOString().split('T')[0]
-      };
-    }
-
+    const uid = this.getActiveUserId();
     const credits = this.getCustomerCredits();
     if (credit.id) {
       const index = credits.findIndex((c) => c.id === credit.id);
@@ -579,11 +865,14 @@ export const StorageEngine = {
         const updated: CustomerCredit = {
           ...credit,
           id: credit.id,
-          userId: this.getActiveUserId() || undefined,
+          userId: uid || undefined,
           lastPurchaseDate: new Date().toISOString().split('T')[0]
         };
         credits[index] = updated;
         localStorage.setItem(this.getUserKey('credits'), JSON.stringify(credits));
+        if (uid) {
+          saveCustomerCreditToFirestore(uid, updated);
+        }
         notifyListeners();
         return updated;
       }
@@ -592,24 +881,30 @@ export const StorageEngine = {
     const newCred: CustomerCredit = {
       ...credit,
       id: `cred-${Date.now()}`,
-      userId: this.getActiveUserId() || undefined,
+      userId: uid || undefined,
       lastPurchaseDate: new Date().toISOString().split('T')[0]
     };
     credits.unshift(newCred);
     localStorage.setItem(this.getUserKey('credits'), JSON.stringify(credits));
+    if (uid) {
+      saveCustomerCreditToFirestore(uid, newCred);
+    }
     notifyListeners();
     return newCred;
   },
 
   recordCustomerPayment(creditId: string, paymentAmount: number) {
-    if (!this.isUserLoggedIn()) return;
     const credits = this.getCustomerCredits();
     const cred = credits.find((c) => c.id === creditId);
     if (!cred) return;
 
+    const uid = this.getActiveUserId();
     const remaining = Math.max(0, cred.amountOwed - paymentAmount);
     cred.amountOwed = remaining;
     localStorage.setItem(this.getUserKey('credits'), JSON.stringify(credits));
+    if (uid) {
+      saveCustomerCreditToFirestore(uid, cred);
+    }
 
     // Record as incoming sale transaction
     this.addTransaction({
@@ -627,9 +922,12 @@ export const StorageEngine = {
   },
 
   deleteCustomerCredit(id: string) {
-    if (!this.isUserLoggedIn()) return;
+    const uid = this.getActiveUserId();
     const credits = this.getCustomerCredits().filter((c) => c.id !== id);
     localStorage.setItem(this.getUserKey('credits'), JSON.stringify(credits));
+    if (uid) {
+      deleteCustomerCreditFromFirestore(uid, id);
+    }
     notifyListeners();
   },
 
@@ -703,28 +1001,44 @@ export const StorageEngine = {
   async synchronizeNow(): Promise<{ syncedCount: number; message: string }> {
     const queue = this.getSyncQueue();
     const count = queue.length;
-    await new Promise((r) => setTimeout(r, 600));
+    const uid = this.getActiveUserId();
 
-    if (this.isUserLoggedIn()) {
-      const apps = this.getApplications().map((a) => (a.syncStatus === 'queued' ? { ...a, syncStatus: 'synced' as const, status: 'submitted' as const } : a));
-      localStorage.setItem(this.getUserKey('applications'), JSON.stringify(apps));
+    // 1. Sync public data with cloud
+    await this.syncPublicDataWithCloud();
 
-      const txs = this.getTransactions().map((t) => (t.syncStatus === 'saved_locally' ? { ...t, syncStatus: 'synced' as const } : t));
-      localStorage.setItem(this.getUserKey('transactions'), JSON.stringify(txs));
+    // 2. If user is logged in, sync user private data with cloud
+    if (uid) {
+      // Push any locally saved transactions
+      const localTxs = this.getTransactions();
+      const unsyncedTxs = localTxs.filter((t) => t.syncStatus === 'saved_locally');
+      for (const tx of unsyncedTxs) {
+        await saveTransactionToFirestore(uid, { ...tx, syncStatus: 'synced' });
+      }
+      const updatedTxs = localTxs.map((t) => ({ ...t, syncStatus: 'synced' as const }));
+      localStorage.setItem(this.getUserKey('transactions'), JSON.stringify(updatedTxs));
+
+      // Push any inventory
+      const localInv = this.getInventory();
+      for (const item of localInv) {
+        await saveInventoryItemToFirestore(uid, item);
+      }
+
+      // Push any credits
+      const localCredits = this.getCustomerCredits();
+      for (const cred of localCredits) {
+        await saveCustomerCreditToFirestore(uid, cred);
+      }
+
+      // Pull fresh data from cloud
+      await this.syncUserDataWithCloud(uid);
 
       this.clearSyncQueue();
     }
 
-    const gigs = this.getGigRequests().map((g) => (g.syncStatus === 'queued' ? { ...g, syncStatus: 'synced' as const } : g));
-    localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify(gigs));
-
-    const jobs = this.getJobs().map((j) => (j.syncStatus === 'queued' ? { ...j, syncStatus: 'synced' as const } : j));
-    localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify(jobs));
-
     notifyListeners();
     return {
       syncedCount: count,
-      message: count > 0 ? `Successfully synchronized ${count} offline updates with Zimbabwe server.` : 'Device database is already up to date.'
+      message: 'Cloud sync complete. Database and offline cache are fully synchronized.'
     };
   },
 
@@ -783,6 +1097,77 @@ export const StorageEngine = {
 
   restoreBackupJSON(jsonString: string): boolean {
     return this.restoreDatabaseFromJson(jsonString);
+  },
+
+  /**
+   * Reset / Wipe all user related data and transactions for complete user data control and integrity.
+   * Cleans personal transactions, inventory items, customer credit ledgers, job applications,
+   * course progress, certificates, and outbox sync queue.
+   */
+  async wipeUserData(): Promise<void> {
+    const uid = this.getActiveUserId();
+
+    // 1. Wipe local user and guest keys
+    const prefixes = [
+      'comfort_hub_guest_',
+      uid ? `comfort_hub_user_${uid}_` : ''
+    ].filter(Boolean);
+
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && prefixes.some((p) => key.startsWith(p))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+    // 2. Clear out in Firestore if logged in and online
+    if (uid && this.isEffectivelyOnline()) {
+      try {
+        const [txs, inv, creds] = await Promise.all([
+          fetchTransactionsFromFirestore(uid),
+          fetchInventoryFromFirestore(uid),
+          fetchCustomerCreditsFromFirestore(uid)
+        ]);
+
+        await Promise.all([
+          ...txs.map((t) => deleteTransactionFromFirestore(uid, t.id)),
+          ...inv.map((i) => deleteInventoryItemFromFirestore(uid, i.id)),
+          ...creds.map((c) => deleteCustomerCreditFromFirestore(uid, c.id))
+        ]);
+
+        await saveUserProfileToFirestore(uid, {
+          fullName: 'Member',
+          phone: '',
+          email: '',
+          suburb: 'Bulawayo CBD',
+          city: 'Bulawayo',
+          headline: 'Comfort Skills Hub Member',
+          bio: '',
+          education: '',
+          workExperience: '',
+          skills: [],
+          references: '',
+          roles: ['learner', 'jobseeker', 'worker', 'business_owner'],
+          isWorkerProfileActive: false,
+          avatarUrl: '',
+          cvTemplate: 'modern_teal',
+          structuredExperiences: [],
+          structuredEducations: [],
+          structuredReferences: []
+        });
+      } catch (e) {
+        console.warn('Remote wipe failed:', e);
+      }
+    }
+
+    // 3. Re-initialize empty containers so views render pristine without error
+    if (uid) {
+      this.initUserDataIfEmpty(uid);
+    }
+
+    notifyListeners();
   },
 
   resetToDefault() {
