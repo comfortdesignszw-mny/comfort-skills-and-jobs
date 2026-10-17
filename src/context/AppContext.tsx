@@ -78,23 +78,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Monitor Firebase Auth state & enforce account-isolated privacy
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setAuthLoading(false);
       if (user) {
         StorageEngine.setActiveUser(user.uid);
-        try {
-          const synced = await syncUserProfileWithFirestore(user);
+        // Silent non-blocking profile synchronization in background
+        syncUserProfileWithFirestore(user).then((synced) => {
           const currentProfile = StorageEngine.getUserProfile();
+          const isAdmin = user.email === 'comfort.designszw@gmail.com';
           StorageEngine.saveUserProfile({
             ...currentProfile,
             ...synced,
             fullName: synced.fullName || user.displayName || currentProfile.fullName || 'Member',
-            email: user.email || currentProfile.email
+            email: user.email || currentProfile.email,
+            isEmployerVerified: isAdmin ? true : currentProfile.isEmployerVerified,
+            employerKYCStatus: isAdmin ? 'verified' : (currentProfile.employerKYCStatus || 'none')
           });
-        } catch (e) {
-          console.warn('Could not sync user profile on startup:', e);
-        }
+        }).catch((e) => {
+          console.warn('Silent offline startup - profile loaded from local storage cache:', e);
+        });
       } else {
         StorageEngine.setActiveUser(null);
       }

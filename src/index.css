@@ -31,3 +31,85 @@
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 1rem);
 }
+
+/* Styled visible scrollbar for mobile business navigation */
+.mobile-horizontal-scrollbar {
+  scrollbar-width: thin !important;
+  scrollbar-color: #0d9488 #e2e8f0 !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-horizontal-scrollbar::-webkit-scrollbar {
+  height: 6px !important;
+  display: block !important;
+}
+
+.mobile-horizontal-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9 !important;
+  border-radius: 9999px !important;
+}
+
+.mobile-horizontal-scrollbar::-webkit-scrollbar-thumb {
+  background: #0d9488 !important;
+  border-radius: 9999px !important;
+}
+
+/* Print Isolation: Print ONLY the CV document without app header, footer, tabs or floating elements */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+
+  /* Completely hide all page content by default */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Make ONLY the CV document and its descendants visible */
+  #cv-print-document,
+  #cv-print-document * {
+    visibility: visible !important;
+  }
+
+  /* Position the CV document at the very top-left of the printed page */
+  #cv-print-document {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Explicitly suppress application shell elements */
+  header,
+  nav,
+  footer,
+  aside,
+  .no-print,
+  button,
+  input,
+  textarea,
+  select,
+  [role="dialog"],
+  .fixed,
+  .sticky {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  body, html {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+}

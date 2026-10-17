@@ -235,12 +235,6 @@ export const CVRenderer: React.FC<CVRendererProps> = ({ profile, certificates, t
                 ))}
               </ul>
             </section>
-
-            {/* Verification Watermark */}
-            <div className="pt-3 border-t border-teal-200/60 text-[9px] text-teal-800 leading-tight">
-              <p className="font-bold">Comfort Skills &amp; Jobs Hub</p>
-              <p>Bulawayo Verified Vocational CV</p>
-            </div>
           </div>
         </div>
       </div>
@@ -253,26 +247,35 @@ export const CVRenderer: React.FC<CVRendererProps> = ({ profile, certificates, t
   if (template === 'executive_navy') {
     return (
       <div id="cv-print-document" className="bg-white text-slate-900 w-full max-w-[800px] mx-auto p-8 font-serif shadow-lg rounded-2xl print:shadow-none print:p-6 print:rounded-none">
-        <div className="border-b-2 border-slate-900 pb-4 mb-6 text-center">
-          <h1 className="text-3xl font-bold tracking-widest text-slate-950 uppercase font-sans">
-            {profile.fullName || 'Comfort Nyoni'}
-          </h1>
-          <p className="text-sm font-semibold text-slate-700 uppercase tracking-wider font-sans mt-1">
-            {profile.headline || 'Vocational Technician & Business Manager'}
-          </p>
-          <div className="flex justify-center flex-wrap items-center gap-4 text-xs text-slate-600 mt-2 font-sans">
-            <span>{profile.phone}</span>
-            <span>·</span>
-            <span>{profile.email}</span>
-            <span>·</span>
-            <span>{profile.suburb}, {profile.city}</span>
-            {profile.driverLicense && (
-              <>
-                <span>·</span>
-                <span>Driver’s Class: {profile.driverLicense}</span>
-              </>
-            )}
+        <div className="border-b-2 border-slate-900 pb-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="text-center sm:text-left flex-1">
+            <h1 className="text-3xl font-bold tracking-widest text-slate-950 uppercase font-sans">
+              {profile.fullName || 'Comfort Nyoni'}
+            </h1>
+            <p className="text-sm font-semibold text-slate-700 uppercase tracking-wider font-sans mt-1">
+              {profile.headline || 'Vocational Technician & Business Manager'}
+            </p>
+            <div className="flex flex-wrap justify-center sm:justify-start items-center gap-3 text-xs text-slate-600 mt-2 font-sans">
+              <span>{profile.phone}</span>
+              <span>·</span>
+              <span>{profile.email}</span>
+              <span>·</span>
+              <span>{profile.suburb}, {profile.city}</span>
+              {profile.driverLicense && (
+                <>
+                  <span>·</span>
+                  <span>Driver’s Class: {profile.driverLicense}</span>
+                </>
+              )}
+            </div>
           </div>
+          {profile.avatarUrl && (
+            <img 
+              src={profile.avatarUrl} 
+              alt={profile.fullName} 
+              className="w-20 h-20 rounded-xl object-cover border-2 border-slate-900 shrink-0" 
+            />
+          )}
         </div>
 
         <div className="space-y-5">
@@ -370,19 +373,28 @@ export const CVRenderer: React.FC<CVRendererProps> = ({ profile, certificates, t
   if (template === 'clean_minimal') {
     return (
       <div id="cv-print-document" className="bg-white text-slate-900 w-full max-w-[800px] mx-auto p-10 font-sans shadow-lg rounded-2xl print:shadow-none print:p-6 print:rounded-none">
-        <div className="mb-8">
-          <h1 className="text-4xl font-light text-slate-950 tracking-tight">
-            {profile.fullName || 'Comfort Nyoni'}
-          </h1>
-          <p className="text-sm text-slate-500 font-medium mt-1">
-            {profile.headline || 'Technical Artisan & Craftsman'}
-          </p>
-          <div className="flex flex-wrap gap-4 text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">
-            <span>{profile.phone}</span>
-            <span>{profile.email}</span>
-            <span>{profile.suburb}, {profile.city}</span>
-            {profile.driverLicense && <span>License: {profile.driverLicense}</span>}
+        <div className="mb-8 flex items-start justify-between gap-4 border-b border-slate-100 pb-5">
+          <div className="flex-1">
+            <h1 className="text-4xl font-light text-slate-950 tracking-tight">
+              {profile.fullName || 'Comfort Nyoni'}
+            </h1>
+            <p className="text-sm text-slate-500 font-medium mt-1">
+              {profile.headline || 'Technical Artisan & Craftsman'}
+            </p>
+            <div className="flex flex-wrap gap-4 text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">
+              <span>{profile.phone}</span>
+              <span>{profile.email}</span>
+              <span>{profile.suburb}, {profile.city}</span>
+              {profile.driverLicense && <span>License: {profile.driverLicense}</span>}
+            </div>
           </div>
+          {profile.avatarUrl && (
+            <img 
+              src={profile.avatarUrl} 
+              alt={profile.fullName} 
+              className="w-20 h-20 rounded-2xl object-cover border border-slate-200 shrink-0" 
+            />
+          )}
         </div>
 
         <div className="space-y-6">

@@ -326,79 +326,104 @@ export const BusinessView: React.FC = () => {
         </div>
       </div>
 
-      {/* Internal Navigation Tabs */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-        <div className="flex gap-2 overflow-x-auto">
-          {[
-            { id: 'cashbook', label: 'Cashbook Ledger', count: transactions.length },
-            { id: 'inventory', label: 'Stock & Spares', count: inventory.length },
-            { id: 'debtors', label: 'Customer Debts', count: customerCredits.length },
-            { id: 'reports', label: 'Profit & Reports' }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setBizTab(tab.id as any)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 ${
-                bizTab === tab.id
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
-            >
-              <span>{tab.label}</span>
-              {tab.count !== undefined && (
-                <span className="text-[10px] bg-slate-200 text-slate-800 px-1.5 py-0.2 rounded-full">
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
+      {/* Internal Navigation Tabs with Visible Mobile Horizontal Scroll Bar */}
+      <div className="space-y-3">
+        {/* Mobile Swipe Guidance Banner */}
+        <div className="flex sm:hidden items-center justify-between text-[11px] font-semibold text-slate-600 bg-slate-100/80 px-3 py-1.5 rounded-xl border border-slate-200/80">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+            <span>Scroll bar reveals hidden tools:</span>
+          </div>
+          <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">
+            Swipe Right →
+          </span>
         </div>
 
-        {/* Quick Add Action based on active tab */}
-        {bizTab === 'cashbook' && (
-          <div className="flex gap-2">
+        {/* Visible Horizontal Scroll Navigation Bar */}
+        <div className="overflow-x-auto mobile-horizontal-scrollbar pb-2.5 pt-0.5 px-0.5">
+          <div className="flex gap-2 min-w-max">
+            {[
+              { id: 'cashbook', label: '📒 Cashbook Ledger', count: transactions.length },
+              { id: 'inventory', label: '📦 Stock & Spares', count: inventory.length },
+              { id: 'debtors', label: '👥 Customer Debts', count: customerCredits.length },
+              { id: 'reports', label: '📊 Profit & Reports' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setBizTab(tab.id as any)}
+                className={`px-3.5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 shrink-0 active:scale-95 ${
+                  bizTab === tab.id
+                    ? 'bg-slate-900 text-white shadow-sm ring-2 ring-slate-900/10'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                <span>{tab.label}</span>
+                {tab.count !== undefined && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                    bizTab === tab.id ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-700'
+                  }`}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Contextual Quick Actions for active subsection */}
+        <div className="flex items-center justify-between border-b border-slate-200 pb-2.5 pt-1">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            {bizTab === 'cashbook' && 'Live Cash Flow'}
+            {bizTab === 'inventory' && 'Inventory Stockpile'}
+            {bizTab === 'debtors' && 'Credit Ledger (Zvikwereti)'}
+            {bizTab === 'reports' && 'Monthly Performance'}
+          </span>
+
+          {bizTab === 'cashbook' && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setTxType('sale');
+                  setShowAddTxModal(true);
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Record Sale</span>
+              </button>
+              <button
+                onClick={() => {
+                  setTxType('expense');
+                  setShowAddTxModal(true);
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs font-bold hover:bg-rose-100 transition active:scale-95"
+              >
+                <Minus className="w-3.5 h-3.5" />
+                <span>Expense</span>
+              </button>
+            </div>
+          )}
+
+          {bizTab === 'inventory' && (
             <button
-              onClick={() => {
-                setTxType('sale');
-                setShowAddTxModal(true);
-              }}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition"
+              onClick={() => setShowAddInvModal(true)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition active:scale-95"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Record Sale</span>
+              <span>Add Stock Item</span>
             </button>
+          )}
+
+          {bizTab === 'debtors' && (
             <button
-              onClick={() => {
-                setTxType('expense');
-                setShowAddTxModal(true);
-              }}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs font-bold hover:bg-rose-100 transition"
+              onClick={() => setShowAddCreditModal(true)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition active:scale-95"
             >
-              <Minus className="w-3.5 h-3.5" />
-              <span>Expense</span>
+              <Plus className="w-3.5 h-3.5" />
+              <span>Record Debtor</span>
             </button>
-          </div>
-        )}
-
-        {bizTab === 'inventory' && (
-          <button
-            onClick={() => setShowAddInvModal(true)}
-            className="flex items-center gap-1 px-3 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Stock Item</span>
-          </button>
-        )}
-
-        {bizTab === 'debtors' && (
-          <button
-            onClick={() => setShowAddCreditModal(true)}
-            className="flex items-center gap-1 px-3 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Record Debtor</span>
-          </button>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ================= TAB 1: CASHBOOK ================= */}

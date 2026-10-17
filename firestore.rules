@@ -13,11 +13,15 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == "comfort.designszw@gmail.com";
+    }
+
     match /users/{userId} {
       allow read: if true;
       allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
 
       match /transactions/{txId} {
         allow read, write: if isOwner(userId);
@@ -35,26 +39,32 @@ service cloud.firestore {
     match /artisans/{workerId} {
       allow read: if true;
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || request.auth.token.email == "comfort.designszw@gmail.com");
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /jobs/{jobId} {
       allow read: if true;
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (resource.data.postedBy == request.auth.uid || request.auth.token.email == "comfort.designszw@gmail.com");
+      allow update, delete: if isSignedIn() && (resource.data.postedBy == request.auth.uid || isAdmin());
     }
 
     match /applications/{appId} {
-      allow read: if isSignedIn() && (resource.data.applicantId == request.auth.uid || resource.data.employerId == request.auth.uid || request.auth.token.email == "comfort.designszw@gmail.com");
+      allow read: if isSignedIn() && (resource.data.applicantId == request.auth.uid || resource.data.employerId == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && request.resource.data.applicantId == request.auth.uid;
-      allow update, delete: if isSignedIn() && (resource.data.applicantId == request.auth.uid || request.auth.token.email == "comfort.designszw@gmail.com");
+      allow update, delete: if isSignedIn() && (resource.data.applicantId == request.auth.uid || isAdmin());
     }
 
     match /gigs/{gigId} {
       allow read: if true;
       allow create: if isSignedIn();
-      allow update: if isSignedIn() && (resource.data.customerId == request.auth.uid || resource.data.assignedWorkerId == request.auth.uid || request.auth.token.email == "comfort.designszw@gmail.com");
-      allow delete: if isSignedIn() && (resource.data.customerId == request.auth.uid || request.auth.token.email == "comfort.designszw@gmail.com");
+      allow update: if isSignedIn() && (resource.data.customerId == request.auth.uid || resource.data.assignedWorkerId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (resource.data.customerId == request.auth.uid || isAdmin());
+    }
+
+    match /kyc_applications/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
     }
   }
 }

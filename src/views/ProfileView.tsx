@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   User, 
   MapPin, 
@@ -29,16 +29,22 @@ import {
   Car,
   Languages,
   Check,
-  Eye
+  Eye,
+  AlertTriangle,
+  Building2,
+  X,
+  ExternalLink,
+  Clock,
+  ShieldAlert
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { StorageEngine } from '../db/storage';
-import { UserProfile, CVTemplateId, CVExperience, CVEducation, CVReference } from '../types';
+import { UserProfile, CVTemplateId, CVExperience, CVEducation, CVReference, EmployerKYC } from '../types';
 import { saveUserProfileToFirestore } from '../firebase';
 import { compressImageFile } from '../utils/imageCompression';
 import { CVRenderer } from '../components/CVRenderer';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { toJpeg } from 'html-to-image';
 
 const TEMPLATE_OPTIONS: Array<{ id: CVTemplateId; label: string; description: string; badge: string; color: string }> = [
   {
@@ -256,7 +262,8 @@ export const ProfileView: React.FC = () => {
 
   /**
    * PDF Generation and Export
-   * Uses html2canvas to render the selected template into high-res canvas, then jsPDF to download.
+   * Uses html-to-image to render the selected template into high-res JPEG, then jsPDF to download.
+   * Completely immune to Tailwind CSS v4 oklch() color issues.
    */
   const handleExportPDF = async () => {
     const docElement = document.getElementById('cv-print-document');
@@ -269,14 +276,20 @@ export const ProfileView: React.FC = () => {
       setIsGeneratingPdf(true);
       showToast('Rendering high-resolution CV PDF...');
 
-      const canvas = await html2canvas(docElement, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
+      const imgData = await toJpeg(docElement, {
+        quality: 0.95,
+        backgroundColor: '#ffffff',
+        pixelRatio: 2,
+        cacheBust: true
       });
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const img = new Image();
+      img.src = imgData;
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Failed to load rasterized CV image.'));
+      });
+
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
@@ -284,7 +297,7 @@ export const ProfileView: React.FC = () => {
       });
 
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pdfHeight = (img.height * pdfWidth) / img.width;
 
       pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
       const cleanName = (userProfile.fullName || 'Professional_CV').replace(/\s+/g, '_');
@@ -292,6 +305,7 @@ export const ProfileView: React.FC = () => {
       showToast('CV PDF successfully downloaded!');
     } catch (err) {
       console.error('PDF export error:', err);
+      showToast('Opening print dialog to Save as PDF...');
       // Fallback to browser print dialog which supports Save as PDF
       window.print();
     } finally {
@@ -299,7 +313,137 @@ export const ProfileView: React.FC = () => {
     }
   };
 
+  const isAdmin = currentUser?.email === 'comfort.designszw@gmail.com';
+  const isEmployerVerified = userProfile.isEmployerVerified || userProfile.employerKYCStatus === 'verified' || isAdmin;
+
+  // Employer KYC Modal & Application States
+  const [showKYCSubmitModal, setShowKYCSubmitModal] = useState(false);
+  const [showKYCStatusModal, setShowKYCStatusModal] = useState(false);
+  const [kycFullName, setKycFullName] = useState(userProfile.fullName || currentUser?.displayName || '');
+  const [kycIdNumber, setKycIdNumber] = useState(userProfile.employerKYC?.idNumber || '');
+  const [kycIdPhoto, setKycIdPhoto] = useState(userProfile.employerKYC?.idPhotoUrl || '');
+  const [kycCompanyName, setKycCompanyName] = useState(userProfile.employerKYC?.companyName || '');
+  const [kycCompanyReg, setKycCompanyReg] = useState(userProfile.employerKYC?.companyRegNumber || '');
+  const [kycCr14Photo, setKycCr14Photo] = useState(userProfile.employerKYC?.cr14PhotoUrl || '');
+  const [isSubmittingKYC, setIsSubmittingKYC] = useState(false);
+  const [isCompressingKYCID, setIsCompressingKYCID] = useState(false);
+  const [isCompressingKYCCR14, setIsCompressingKYCCR14] = useState(false);
+  const [selectedKYCPreviewImage, setSelectedKYCPreviewImage] = useState<string | null>(null);
+
+  // Admin Desk KYC state
+  const [adminKYCList, setAdminKYCList] = useState<EmployerKYC[]>([]);
+  const [adminLoadingKYC, setAdminLoadingKYC] = useState(false);
+
+  const loadAdminKYCData = async () => {
+    if (!isAdmin) return;
+    setAdminLoadingKYC(true);
+    try {
+      const all = await StorageEngine.getAllKYCApplications();
+      setAdminKYCList(all);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAdminLoadingKYC(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      loadAdminKYCData();
+    }
+  }, [isAdmin]);
+
+  const handleKYCIDUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsCompressingKYCID(true);
+      const compressed = await compressImageFile(file, { maxWidth: 900, maxHeight: 900, quality: 0.82 });
+      setKycIdPhoto(compressed);
+      showToast('National ID photo compressed and loaded.');
+    } catch {
+      showToast('Could not process ID image.');
+    } finally {
+      setIsCompressingKYCID(false);
+    }
+  };
+
+  const handleKYCCR14Upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsCompressingKYCCR14(true);
+      const compressed = await compressImageFile(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.82 });
+      setKycCr14Photo(compressed);
+      showToast('Company CR14 document loaded.');
+    } catch {
+      showToast('Could not process CR14 document.');
+    } finally {
+      setIsCompressingKYCCR14(false);
+    }
+  };
+
+  const handleSubmitEmployerKYC = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!kycFullName.trim() || !kycIdNumber.trim() || !kycCompanyName.trim()) {
+      showToast('Please provide your Full Name, National ID Number, and Company Name.');
+      return;
+    }
+    if (!kycIdPhoto) {
+      showToast('Please upload a photo of your National ID.');
+      return;
+    }
+
+    setIsSubmittingKYC(true);
+    try {
+      StorageEngine.submitEmployerKYC({
+        fullName: kycFullName.trim(),
+        idNumber: kycIdNumber.trim(),
+        idPhotoUrl: kycIdPhoto,
+        companyName: kycCompanyName.trim(),
+        companyRegNumber: kycCompanyReg.trim() || undefined,
+        cr14PhotoUrl: kycCr14Photo || undefined
+      });
+
+      setShowKYCSubmitModal(false);
+      showToast('Employer KYC submitted! It will be reviewed by administration shortly.');
+      if (isAdmin) {
+        loadAdminKYCData();
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to submit KYC.');
+    } finally {
+      setIsSubmittingKYC(false);
+    }
+  };
+
+  const handleAdminReviewKYC = async (userId: string, status: 'verified' | 'rejected', reason?: string) => {
+    try {
+      const reviewer = currentUser?.email || 'admin@comfortskills.com';
+      await StorageEngine.reviewEmployerKYC(userId, status, reviewer, reason);
+      showToast(`Applicant successfully ${status === 'verified' ? 'approved as Verified Employer!' : 'rejected.'}`);
+      await loadAdminKYCData();
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to update KYC status.');
+    }
+  };
+
   const toggleRole = (role: 'learner' | 'jobseeker' | 'worker' | 'employer' | 'business_owner') => {
+    // If activating Employer role, require verified KYC
+    if (role === 'employer' && !formData.roles.includes('employer')) {
+      if (!isEmployerVerified) {
+        if (userProfile.employerKYCStatus === 'pending') {
+          showToast('Your Employer KYC application is currently pending administrator review.');
+          setShowKYCStatusModal(true);
+          return;
+        }
+        setShowKYCSubmitModal(true);
+        return;
+      }
+    }
+
     let nextRoles = [...formData.roles];
     if (nextRoles.includes(role)) {
       if (nextRoles.length > 1) {
@@ -312,6 +456,84 @@ export const ProfileView: React.FC = () => {
       nextRoles.push(role);
     }
     setFormData((prev) => ({ ...prev, roles: nextRoles }));
+    const updated = { ...userProfile, roles: nextRoles };
+    updateUserProfile(updated);
+    if (currentUser) {
+      saveUserProfileToFirestore(currentUser.uid, updated);
+    }
+  };
+
+  const [showWipeConfirm, setShowWipeConfirm] = useState(false);
+  const [isWiping, setIsWiping] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  const handleBackupData = () => {
+    try {
+      const jsonStr = StorageEngine.exportBackupJSON();
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const dateStr = new Date().toISOString().split('T')[0];
+      link.href = url;
+      link.download = `comfort_skills_backup_${dateStr}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast('Database backup successfully exported as JSON file.');
+    } catch (err) {
+      console.error('Backup error:', err);
+      showToast('Failed to export backup JSON.');
+    }
+  };
+
+  const handleRestoreFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsRestoring(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const content = event.target?.result as string;
+        const success = StorageEngine.restoreBackupJSON(content);
+        if (success) {
+          showToast('Data restored successfully! Refreshing view...');
+          const updated = StorageEngine.getUserProfile();
+          setFormData(updated);
+          setTimeout(() => {
+            window.location.reload();
+          }, 800);
+        } else {
+          showToast('Invalid JSON file format. Please upload a valid Comfort Hub backup.');
+        }
+      } catch (err) {
+        console.error('Restore error:', err);
+        showToast('Error reading backup file.');
+      } finally {
+        setIsRestoring(false);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleConfirmWipe = async () => {
+    try {
+      setIsWiping(true);
+      await StorageEngine.wipeUserData();
+      const cleanProfile = StorageEngine.getUserProfile();
+      setFormData(cleanProfile);
+      setShowWipeConfirm(false);
+      showToast('All your user transactions and personal records have been completely wiped.');
+      setTimeout(() => {
+        window.location.reload();
+      }, 700);
+    } catch (err) {
+      console.error('Wipe error:', err);
+      showToast('Failed to wipe user data.');
+    } finally {
+      setIsWiping(false);
+    }
   };
 
   return (
@@ -431,35 +653,214 @@ export const ProfileView: React.FC = () => {
 
         {/* Roles Badges */}
         <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
-          <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
-            Active Multi-Role Permissions (Tap to toggle)
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+              Active Multi-Role Permissions (Tap to toggle)
+            </span>
+            {isAdmin && (
+              <span className="text-[10px] font-bold text-teal-800 bg-teal-100 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-teal-700" />
+                Verified Administrator
+              </span>
+            )}
+          </div>
+
           <div className="flex flex-wrap gap-2">
             {[
               { id: 'learner', label: '🎓 Learner' },
               { id: 'jobseeker', label: '💼 Job Seeker' },
               { id: 'worker', label: '🤝 Gig Worker' },
               { id: 'business_owner', label: '🏪 Business Owner' },
-              { id: 'employer', label: '🏢 Employer' }
+              { 
+                id: 'employer', 
+                label: isEmployerVerified
+                  ? '🏢 Employer (Verified ✓)'
+                  : userProfile.employerKYCStatus === 'pending'
+                  ? '🏢 Employer (Pending KYC ⏳)'
+                  : '🏢 Employer (Tap for KYC 🔒)'
+              }
             ].map((role) => {
               const active = formData.roles.includes(role.id as any);
               return (
                 <button
                   key={role.id}
                   onClick={() => toggleRole(role.id as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
                     active
                       ? 'bg-teal-600 text-white shadow-2xs'
                       : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                   }`}
                 >
-                  {role.label}
+                  <span>{role.label}</span>
                 </button>
               );
             })}
           </div>
+
+          {/* User KYC pending notice */}
+          {!isAdmin && userProfile.employerKYCStatus === 'pending' && (
+            <div className="mt-2.5 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                <div>
+                  <span className="font-bold text-amber-900 block">Employer KYC In Review</span>
+                  <span className="text-[11px] text-amber-700">
+                    Awaiting administrator review and verification
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowKYCStatusModal(true)}
+                className="px-2.5 py-1 rounded-lg bg-amber-200/60 hover:bg-amber-200 text-amber-900 font-bold text-[11px] transition"
+              >
+                View Status
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* ================= ADMIN VERIFICATION DESK: EMPLOYER KYC ================= */}
+      {isAdmin && (
+        <div className="bg-white rounded-3xl p-6 border-2 border-teal-500 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5 text-teal-700" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                  <span>Admin Employer KYC Verification Desk</span>
+                  <span className="text-[10px] bg-teal-600 text-white px-2 py-0.5 rounded-full font-bold">
+                    Admin Portal
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Secure Administrator Workspace · Review and approve employer identities and CR14 company documents
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={loadAdminKYCData}
+              disabled={adminLoadingKYC}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 self-start sm:self-auto"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${adminLoadingKYC ? 'animate-spin text-teal-600' : ''}`} />
+              <span>Refresh KYC Queue</span>
+            </button>
+          </div>
+
+          {adminKYCList.length === 0 ? (
+            <div className="p-6 rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-center text-xs text-slate-500">
+              No employer KYC submissions currently in the queue. When users apply for the Employer role, their National ID and company registration forms will appear here for verification.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {adminKYCList.map((kyc) => (
+                <div
+                  key={kyc.id}
+                  className={`p-4 rounded-2xl border text-xs space-y-3 transition ${
+                    kyc.status === 'verified'
+                      ? 'bg-emerald-50/50 border-emerald-200'
+                      : kyc.status === 'rejected'
+                      ? 'bg-rose-50/50 border-rose-200'
+                      : 'bg-amber-50/50 border-amber-200'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-2.5">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 text-sm">{kyc.fullName}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          kyc.status === 'verified'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : kyc.status === 'rejected'
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {kyc.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-mono mt-0.5">{kyc.userEmail || `User: ${kyc.userId}`}</p>
+                    </div>
+                    <span className="text-[11px] text-slate-400">
+                      Submitted: {new Date(kyc.submittedAt).toLocaleDateString()}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-3 rounded-xl border border-slate-200">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Company Name</span>
+                      <span className="font-bold text-slate-800">{kyc.companyName}</span>
+                      {kyc.companyRegNumber && (
+                        <p className="text-[11px] text-slate-500">Reg #: {kyc.companyRegNumber}</p>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">National ID Number</span>
+                      <span className="font-mono font-bold text-slate-800">{kyc.idNumber}</span>
+                    </div>
+                  </div>
+
+                  {/* Document Thumbnails */}
+                  <div className="flex flex-wrap gap-4 items-center pt-1">
+                    {kyc.idPhotoUrl && (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">ID Photo</span>
+                        <div 
+                          onClick={() => setSelectedKYCPreviewImage(kyc.idPhotoUrl)}
+                          className="w-20 h-14 rounded-xl border border-slate-200 overflow-hidden cursor-pointer hover:ring-2 hover:ring-teal-500 bg-slate-100"
+                        >
+                          <img src={kyc.idPhotoUrl} alt="National ID" className="w-full h-full object-cover" />
+                        </div>
+                      </div>
+                    )}
+
+                    {kyc.cr14PhotoUrl && (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">CR14 Form</span>
+                        <div 
+                          onClick={() => setSelectedKYCPreviewImage(kyc.cr14PhotoUrl!)}
+                          className="w-20 h-14 rounded-xl border border-slate-200 overflow-hidden cursor-pointer hover:ring-2 hover:ring-teal-500 bg-slate-100"
+                        >
+                          <img src={kyc.cr14PhotoUrl} alt="CR14 Form" className="w-full h-full object-cover" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Admin Decision Actions */}
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/60">
+                    {kyc.status !== 'verified' && (
+                      <button
+                        onClick={() => handleAdminReviewKYC(kyc.userId, 'verified')}
+                        className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition flex items-center gap-1.5"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Approve &amp; Verify Employer</span>
+                      </button>
+                    )}
+
+                    {kyc.status !== 'rejected' && (
+                      <button
+                        onClick={() => {
+                          const reason = prompt('Optional rejection reason (e.g. ID blurry, company unverified):') || 'Details could not be verified';
+                          handleAdminReviewKYC(kyc.userId, 'rejected', reason);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl border border-rose-300 text-rose-700 hover:bg-rose-100 text-xs font-bold transition flex items-center gap-1.5"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Reject</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ================= CV TEMPLATE & VIEW TABS ================= */}
       <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs space-y-4">
@@ -1209,6 +1610,421 @@ export const ProfileView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ================= USER DATA CONTROL & INTEGRITY: BACKUP, RESTORE, WIPE ================= */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-teal-600" />
+              Data Integrity &amp; User Total Control
+            </h3>
+            <p className="text-xs text-slate-500">
+              Export complete JSON backups of your transactions, inventory, and credentials, or wipe your personal data at any time.
+            </p>
+          </div>
+          <span className="text-[11px] font-semibold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg shrink-0">
+            Self-Sovereign Data
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Backup Button */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center gap-2 text-teal-700 font-bold text-xs">
+                <Download className="w-4 h-4" />
+                <span>Backup Data (JSON)</span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                Save an offline, human-readable JSON snapshot containing all your cashbook sales, expenses, and credentials.
+              </p>
+            </div>
+            <button
+              onClick={handleBackupData}
+              className="w-full py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-xs shadow-2xs transition active:scale-95 flex items-center justify-center gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Backup</span>
+            </button>
+          </div>
+
+          {/* Restore Button */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center gap-2 text-indigo-700 font-bold text-xs">
+                <Upload className="w-4 h-4" />
+                <span>Restore Data (JSON)</span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                Import and restore a previously saved JSON file. Existing items will be merged and synchronized.
+              </p>
+            </div>
+            <label className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-2xs transition cursor-pointer flex items-center justify-center gap-1.5 text-center">
+              <Upload className="w-3.5 h-3.5" />
+              <span>{isRestoring ? 'Restoring...' : 'Upload & Restore'}</span>
+              <input
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={handleRestoreFileChange}
+              />
+            </label>
+          </div>
+
+          {/* Reset / Wipe User Data Button */}
+          <div className="p-4 rounded-2xl bg-rose-50/60 border border-rose-200 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center gap-2 text-rose-700 font-bold text-xs">
+                <Trash2 className="w-4 h-4" />
+                <span>Reset / Wipe User Data</span>
+              </div>
+              <p className="text-[11px] text-rose-600/80 mt-1 leading-relaxed">
+                Permanently purge all user transactions, inventory items, credit ledgers, and profile details from device and cloud.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowWipeConfirm(true)}
+              className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs shadow-2xs transition active:scale-95 flex items-center justify-center gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Wipe User Data</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Wipe Confirmation Modal */}
+      {showWipeConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-rose-200 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Wipe All Personal Data?
+                </h3>
+                <p className="text-xs text-rose-600 font-medium">
+                  This action is irreversible.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+              This will permanently delete all your logged <strong>business transactions</strong>, <strong>stock/inventory records</strong>, <strong>debtor ledgers</strong>, and <strong>custom profile information</strong>. 
+              Public courses and job board listings will remain intact.
+            </p>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowWipeConfirm(false)}
+                disabled={isWiping}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition"
+              >
+                Cancel / Keep Data
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmWipe}
+                disabled={isWiping}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5"
+              >
+                {isWiping ? (
+                  <span>Wiping Data...</span>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Yes, Wipe Everything</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ================= EMPLOYER KYC APPLICATION SUBMISSION MODAL ================= */}
+      {showKYCSubmitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4 my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+                  <Building2 className="w-5 h-5 text-teal-700" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Employer KYC Verification Form
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Required to unlock vacancy posting privileges
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowKYCSubmitModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-1">
+              <span className="font-bold flex items-center gap-1">
+                <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0" />
+                Zero Recruitment Scam Policy
+              </span>
+              <p className="text-[11px] leading-relaxed text-amber-800">
+                To protect Zimbabwean job seekers, all employers must verify their identity and company legitimacy. Submissions are reviewed by the platform compliance administration.
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmitEmployerKYC} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Full Legal Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={kycFullName}
+                    onChange={(e) => setKycFullName(e.target.value)}
+                    placeholder="e.g. Comfort Nyoni"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-teal-500 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    National ID Number *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={kycIdNumber}
+                    onChange={(e) => setKycIdNumber(e.target.value)}
+                    placeholder="e.g. 08-123456-X-08"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-teal-500 font-medium font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* ID Photo Upload with compression */}
+              <div className="space-y-1.5">
+                <label className="block font-bold text-slate-700">
+                  National ID Photo * (Auto-compressed)
+                </label>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center gap-3">
+                  <div className="w-16 h-12 rounded-xl border border-slate-300 overflow-hidden shrink-0 bg-white flex items-center justify-center">
+                    {kycIdPhoto ? (
+                      <img src={kycIdPhoto} alt="ID preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <Camera className="w-5 h-5 text-slate-400" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold cursor-pointer transition shadow-2xs">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{isCompressingKYCID ? 'Compressing...' : kycIdPhoto ? 'Change ID Photo' : 'Upload ID Photo'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={handleKYCIDUpload}
+                      />
+                    </label>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Clear photo of metal/plastic Zimbabwean ID card
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Company / Trade Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={kycCompanyName}
+                    onChange={(e) => setKycCompanyName(e.target.value)}
+                    placeholder="e.g. Comfort Designs Zimbabwe"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-teal-500 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Company Reg Number <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={kycCompanyReg}
+                    onChange={(e) => setKycCompanyReg(e.target.value)}
+                    placeholder="e.g. 1234/2023"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-teal-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* CR14 Document Form Upload (Optional) */}
+              <div className="space-y-1.5">
+                <label className="block font-bold text-slate-700">
+                  CR14 / Company Registration Document <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center gap-3">
+                  <div className="w-16 h-12 rounded-xl border border-slate-300 overflow-hidden shrink-0 bg-white flex items-center justify-center">
+                    {kycCr14Photo ? (
+                      <img src={kycCr14Photo} alt="CR14 preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <FileText className="w-5 h-5 text-slate-400" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer transition">
+                      <Upload className="w-3.5 h-3.5 text-slate-500" />
+                      <span>{isCompressingKYCCR14 ? 'Compressing...' : kycCr14Photo ? 'Change CR14 Document' : 'Upload CR14 Form'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleKYCCR14Upload}
+                      />
+                    </label>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Scanned copy or photo of CR14 / Company Incorporation certificate
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowKYCSubmitModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingKYC || isCompressingKYCID || isCompressingKYCCR14}
+                  className="flex-1 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold transition shadow-xs flex items-center justify-center gap-1.5"
+                >
+                  {isSubmittingKYC ? (
+                    <span>Submitting KYC...</span>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Submit for Verification</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= KYC STATUS MODAL FOR APPLICANT ================= */}
+      {showKYCStatusModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-600" />
+                <h3 className="text-base font-bold text-slate-900">
+                  Employer KYC Verification Status
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowKYCStatusModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-900">Verification in Progress</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-extrabold text-[10px] uppercase">
+                    Pending
+                  </span>
+                </div>
+                <p className="text-slate-700 leading-relaxed">
+                  Your identity details and company registration are currently in the queue for administrator review.
+                </p>
+              </div>
+
+              {userProfile.employerKYC && (
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-medium">Company:</span>
+                    <span className="font-bold text-slate-800">{userProfile.employerKYC.companyName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-medium">National ID:</span>
+                    <span className="font-mono font-bold text-slate-800">{userProfile.employerKYC.idNumber}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-medium">Submitted on:</span>
+                    <span className="text-slate-700">{new Date(userProfile.employerKYC.submittedAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setShowKYCStatusModal(false);
+                  setShowKYCSubmitModal(true);
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50 transition"
+              >
+                Update Details
+              </button>
+              <button
+                onClick={() => setShowKYCStatusModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold transition shadow-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox for previewing KYC documents (National ID & CR14) */}
+      {selectedKYCPreviewImage && (
+        <div 
+          onClick={() => setSelectedKYCPreviewImage(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 cursor-pointer"
+        >
+          <div className="relative max-w-2xl max-h-[85vh] bg-transparent" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={selectedKYCPreviewImage}
+              alt="KYC Document Preview"
+              className="max-w-full max-h-[80vh] rounded-2xl object-contain shadow-2xl border border-white/20"
+            />
+            <button
+              onClick={() => setSelectedKYCPreviewImage(null)}
+              className="absolute -top-3 -right-3 p-2 bg-white text-slate-800 rounded-full shadow-lg hover:bg-slate-100"
+              title="Close preview"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

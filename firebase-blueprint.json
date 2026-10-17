@@ -146,6 +146,25 @@
         "notes": { "type": "string" }
       },
       "required": ["id", "customerName", "amountOwed"]
+    },
+    "EmployerKYC": {
+      "title": "Employer KYC Verification",
+      "description": "National ID, company details and proof for employer role verification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "idNumber": { "type": "string" },
+        "idPhotoUrl": { "type": "string" },
+        "companyName": { "type": "string" },
+        "companyRegNumber": { "type": "string" },
+        "cr14PhotoUrl": { "type": "string" },
+        "submittedAt": { "type": "string" },
+        "status": { "type": "string" },
+        "reviewedBy": { "type": "string" }
+      },
+      "required": ["id", "userId", "fullName", "idNumber", "companyName", "status"]
     }
   },
   "firestore": {
@@ -180,6 +199,10 @@
     "/gigs/{gigId}": {
       "schema": "GigRequest",
       "description": "Gig and task requests"
+    },
+    "/kyc_applications/{userId}": {
+      "schema": "EmployerKYC",
+      "description": "Employer KYC verification applications reviewed by admin"
     }
   }
 }

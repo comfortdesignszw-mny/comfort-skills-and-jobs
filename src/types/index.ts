@@ -111,6 +111,8 @@ export interface JobVacancy {
   postedDate: string;
   closingDate: string;
   contactMethod: string;
+  postedBy?: string;
+  postedByEmail?: string;
   syncStatus: SyncState;
 }
 
@@ -244,6 +246,23 @@ export interface CVReference {
 
 export type CVTemplateId = 'modern_teal' | 'executive_navy' | 'clean_minimal' | 'technical_slate' | 'bold_compact';
 
+export interface EmployerKYC {
+  id: string;
+  userId: string;
+  userEmail: string;
+  fullName: string;
+  idNumber: string;
+  idPhotoUrl: string; // Base64 compressed image
+  companyName: string;
+  companyRegNumber?: string;
+  cr14PhotoUrl?: string; // Base64 compressed image
+  submittedAt: string;
+  status: 'pending' | 'verified' | 'rejected';
+  rejectionReason?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+}
+
 export interface UserProfile {
   id: string;
   fullName: string;
@@ -270,6 +289,10 @@ export interface UserProfile {
   structuredEducations?: CVEducation[];
   structuredReferences?: CVReference[];
   customCertifications?: string[];
+  // Employer Verification & KYC
+  isEmployerVerified?: boolean;
+  employerKYCStatus?: 'none' | 'pending' | 'verified' | 'rejected';
+  employerKYC?: EmployerKYC;
 }
 
 export interface SyncQueueItem {

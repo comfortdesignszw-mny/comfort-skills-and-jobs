@@ -10,7 +10,8 @@ import {
   GigRequest, 
   Certificate,
   SyncQueueItem,
-  CourseProgress 
+  CourseProgress,
+  EmployerKYC
 } from '../types';
 import { 
   INITIAL_COURSES, 
@@ -34,8 +35,16 @@ import {
   fetchCustomerCreditsFromFirestore,
   saveArtisanToFirestore,
   fetchArtisansFromFirestore,
+  deleteArtisanFromFirestore,
   saveGigRequestToFirestore,
-  fetchGigRequestsFromFirestore
+  fetchGigRequestsFromFirestore,
+  saveJobToFirestore,
+  deleteJobFromFirestore,
+  fetchJobsFromFirestore,
+  saveKYCApplicationToFirestore,
+  fetchKYCApplicationsFromFirestore,
+  updateKYCStatusInFirestore,
+  ADMIN_EMAIL
 } from '../firebase';
 
 const PUBLIC_STORAGE_KEYS = {
@@ -145,6 +154,20 @@ export const StorageEngine = {
         localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify([]));
       }
 
+      // Sanitize jobs: remove all legacy seeded mock vacancies
+      const rawJobs = localStorage.getItem(PUBLIC_STORAGE_KEYS.JOBS);
+      if (rawJobs) {
+        try {
+          const jobs: JobVacancy[] = JSON.parse(rawJobs);
+          const sanitized = jobs.filter((j) => !['job-1', 'job-2', 'job-3', 'job-4', 'job-5', 'job-6'].includes(j.id));
+          localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify(sanitized));
+        } catch {
+          localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify([]));
+        }
+      } else {
+        localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify([]));
+      }
+
       // Scan all localStorage keys for old mock transactions, inventory, credits
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -171,7 +194,7 @@ export const StorageEngine = {
         }
       }
 
-      localStorage.setItem('comfort_hub_clean_prod_v6_purged', 'true');
+      localStorage.setItem('comfort_hub_clean_prod_v8_purged', 'true');
     } catch (e) {
       console.warn('Sample data purge failed:', e);
     }
@@ -243,26 +266,29 @@ export const StorageEngine = {
         fetchCustomerCreditsFromFirestore(uid)
       ]);
 
-      if (remoteTxs.length > 0) {
+      const cleanTxs = remoteTxs.filter((t) => !['tx-1', 'tx-2', 'tx-3', 'tx-4', 'tx-5'].includes(t.id));
+      if (cleanTxs.length > 0) {
         const localTxs = this.getTransactions();
         const txMap = new Map<string, BusinessTransaction>();
-        remoteTxs.forEach((t) => txMap.set(t.id, t));
+        cleanTxs.forEach((t) => txMap.set(t.id, t));
         localTxs.forEach((t) => txMap.set(t.id, t));
         localStorage.setItem(`comfort_hub_user_${uid}_transactions`, JSON.stringify(Array.from(txMap.values())));
       }
 
-      if (remoteInv.length > 0) {
+      const cleanInv = remoteInv.filter((item) => !['inv-1', 'inv-2', 'inv-3'].includes(item.id));
+      if (cleanInv.length > 0) {
         const localInv = this.getInventory();
         const invMap = new Map<string, InventoryItem>();
-        remoteInv.forEach((i) => invMap.set(i.id, i));
+        cleanInv.forEach((i) => invMap.set(i.id, i));
         localInv.forEach((i) => invMap.set(i.id, i));
         localStorage.setItem(`comfort_hub_user_${uid}_inventory`, JSON.stringify(Array.from(invMap.values())));
       }
 
-      if (remoteCredits.length > 0) {
+      const cleanCredits = remoteCredits.filter((c) => !['cred-1'].includes(c.id));
+      if (cleanCredits.length > 0) {
         const localCreds = this.getCustomerCredits();
         const credMap = new Map<string, CustomerCredit>();
-        remoteCredits.forEach((c) => credMap.set(c.id, c));
+        cleanCredits.forEach((c) => credMap.set(c.id, c));
         localCreds.forEach((c) => credMap.set(c.id, c));
         localStorage.setItem(`comfort_hub_user_${uid}_credits`, JSON.stringify(Array.from(credMap.values())));
       }
@@ -274,36 +300,79 @@ export const StorageEngine = {
   },
 
   /**
-   * Sync public artisans and gigs from Firestore
+   * Sync public artisans, gigs, and global user-created job vacancies from Firestore
    */
   async syncPublicDataWithCloud() {
     if (!this.isEffectivelyOnline()) return;
     try {
-      const [remoteArtisans, remoteGigs] = await Promise.all([
+      const [remoteArtisans, remoteGigs, remoteJobs] = await Promise.all([
         fetchArtisansFromFirestore(),
-        fetchGigRequestsFromFirestore()
+        fetchGigRequestsFromFirestore(),
+        fetchJobsFromFirestore()
       ]);
 
-      if (remoteArtisans.length > 0) {
+      const sampleNames = ['Sipho Moyo', 'Tendai Chideme', 'Blessing Ncube', 'Farai Gumbo', 'Nomsa Dube', 'Tatenda Ndlovu'];
+      const cleanArtisans = remoteArtisans.filter((w) => !w.id.startsWith('worker-') && !sampleNames.includes(w.name));
+      if (cleanArtisans.length > 0) {
         const localArtisans = this.getWorkers();
         const workerMap = new Map<string, GigWorker>();
-        remoteArtisans.forEach((w) => workerMap.set(w.id, w));
+        cleanArtisans.forEach((w) => workerMap.set(w.id, w));
         localArtisans.forEach((w) => workerMap.set(w.id, w));
         localStorage.setItem(PUBLIC_STORAGE_KEYS.WORKERS, JSON.stringify(Array.from(workerMap.values())));
       }
 
-      if (remoteGigs.length > 0) {
+      const cleanGigs = remoteGigs.filter((g) => !g.id.startsWith('gig-1') && !g.id.startsWith('gig-2') && !g.id.startsWith('gig-3'));
+      if (cleanGigs.length > 0) {
         const localGigs = this.getGigRequests();
         const gigMap = new Map<string, GigRequest>();
-        remoteGigs.forEach((g) => gigMap.set(g.id, g));
+        cleanGigs.forEach((g) => gigMap.set(g.id, g));
         localGigs.forEach((g) => gigMap.set(g.id, g));
         localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify(Array.from(gigMap.values())));
+      }
+
+      const cleanJobs = remoteJobs.filter((j) => !['job-1', 'job-2', 'job-3', 'job-4', 'job-5', 'job-6'].includes(j.id));
+      if (cleanJobs.length > 0) {
+        const localJobs = this.getJobs();
+        const jobMap = new Map<string, JobVacancy>();
+        cleanJobs.forEach((j) => jobMap.set(j.id, j));
+        localJobs.forEach((j) => jobMap.set(j.id, j));
+        localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify(Array.from(jobMap.values())));
       }
 
       notifyListeners();
     } catch (e) {
       console.warn('Public cloud sync error:', e);
     }
+  },
+
+  /**
+   * Non-blocking background sync daemon.
+   * Performs zero HTTP calls on startup to enable instant offline launch.
+   * Periodically and when connectivity returns, silently syncs fresh data in the background.
+   */
+  setupBackgroundSyncDaemon() {
+    if (typeof window === 'undefined') return;
+
+    const runSilentSync = async () => {
+      if (!this.isEffectivelyOnline()) return;
+      try {
+        await this.synchronizeNow();
+      } catch (err) {
+        // Silent catch in background
+      }
+    };
+
+    // When connection is restored, trigger background sync
+    window.addEventListener('online', () => {
+      setTimeout(runSilentSync, 1200);
+    });
+
+    // Low-overhead periodic background check every 30s when tab is active
+    setInterval(() => {
+      if (document.visibilityState === 'visible' && this.isEffectivelyOnline()) {
+        runSilentSync();
+      }
+    }, 30000);
   },
 
   init() {
@@ -318,7 +387,7 @@ export const StorageEngine = {
 
     if (!localStorage.getItem(PUBLIC_STORAGE_KEYS.APP_INITIALIZED)) {
       localStorage.setItem(PUBLIC_STORAGE_KEYS.COURSES, JSON.stringify(INITIAL_COURSES));
-      localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify(INITIAL_JOBS));
+      localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify([]));
       // Production ready: Start with zero seeded artisans and zero seeded gigs
       localStorage.setItem(PUBLIC_STORAGE_KEYS.WORKERS, JSON.stringify([]));
       localStorage.setItem(PUBLIC_STORAGE_KEYS.GIG_REQUESTS, JSON.stringify([]));
@@ -327,8 +396,108 @@ export const StorageEngine = {
       localStorage.setItem(PUBLIC_STORAGE_KEYS.APP_INITIALIZED, 'true');
     }
 
-    // Trigger cloud synchronization of public data in background
-    this.syncPublicDataWithCloud();
+    // Set up silent, non-blocking background connection sync daemon (zero startup handshake)
+    this.setupBackgroundSyncDaemon();
+  },
+
+  // ================= EMPLOYER KYC & ADMIN VERIFICATION =================
+  submitEmployerKYC(kycData: {
+    fullName: string;
+    idNumber: string;
+    idPhotoUrl: string;
+    companyName: string;
+    companyRegNumber?: string;
+    cr14PhotoUrl?: string;
+  }): EmployerKYC {
+    const uid = this.getActiveUserId() || 'guest-user';
+    const profile = this.getUserProfile();
+    const newKYC: EmployerKYC = {
+      id: `kyc-${uid}`,
+      userId: uid,
+      userEmail: profile.email || '',
+      fullName: kycData.fullName,
+      idNumber: kycData.idNumber,
+      idPhotoUrl: kycData.idPhotoUrl,
+      companyName: kycData.companyName,
+      companyRegNumber: kycData.companyRegNumber,
+      cr14PhotoUrl: kycData.cr14PhotoUrl,
+      submittedAt: new Date().toISOString(),
+      status: 'pending'
+    };
+
+    localStorage.setItem(`comfort_hub_kyc_${uid}`, JSON.stringify(newKYC));
+
+    this.saveUserProfile({
+      ...profile,
+      fullName: profile.fullName || kycData.fullName,
+      employerKYCStatus: 'pending',
+      employerKYC: newKYC
+    });
+
+    saveKYCApplicationToFirestore(newKYC);
+    notifyListeners();
+    return newKYC;
+  },
+
+  getEmployerKYC(userId?: string): EmployerKYC | null {
+    const uid = userId || this.getActiveUserId();
+    if (!uid) return null;
+    const raw = localStorage.getItem(`comfort_hub_kyc_${uid}`);
+    return raw ? JSON.parse(raw) : null;
+  },
+
+  async getAllKYCApplications(): Promise<EmployerKYC[]> {
+    try {
+      const remote = await fetchKYCApplicationsFromFirestore();
+      if (remote.length > 0) return remote;
+    } catch {}
+    const list: EmployerKYC[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('comfort_hub_kyc_')) {
+        try {
+          const item = JSON.parse(localStorage.getItem(k) || '');
+          if (item) list.push(item);
+        } catch {}
+      }
+    }
+    return list;
+  },
+
+  async reviewEmployerKYC(
+    userId: string,
+    status: 'verified' | 'rejected',
+    reviewerEmail: string,
+    reason?: string
+  ): Promise<void> {
+    await updateKYCStatusInFirestore(userId, status, reviewerEmail, reason);
+
+    const localRaw = localStorage.getItem(`comfort_hub_kyc_${userId}`);
+    if (localRaw) {
+      try {
+        const item: EmployerKYC = JSON.parse(localRaw);
+        item.status = status;
+        item.reviewedBy = reviewerEmail;
+        item.reviewedAt = new Date().toISOString();
+        item.rejectionReason = reason;
+        localStorage.setItem(`comfort_hub_kyc_${userId}`, JSON.stringify(item));
+      } catch {}
+    }
+
+    if (this.getActiveUserId() === userId) {
+      const profile = this.getUserProfile();
+      const updatedRoles = status === 'verified' && !profile.roles.includes('employer')
+        ? [...profile.roles, 'employer' as const]
+        : profile.roles;
+      this.saveUserProfile({
+        ...profile,
+        roles: updatedRoles,
+        isEmployerVerified: status === 'verified',
+        employerKYCStatus: status
+      });
+    }
+
+    notifyListeners();
   },
 
   initUserDataIfEmpty(uid: string) {
@@ -493,20 +662,34 @@ export const StorageEngine = {
   // ================= PUBLIC DATA: JOBS =================
   getJobs(): JobVacancy[] {
     const raw = localStorage.getItem(PUBLIC_STORAGE_KEYS.JOBS);
-    return raw ? JSON.parse(raw) : INITIAL_JOBS;
+    if (!raw) return [];
+    try {
+      const jobs: JobVacancy[] = JSON.parse(raw);
+      return jobs.filter((j) => !['job-1', 'job-2', 'job-3', 'job-4', 'job-5', 'job-6'].includes(j.id));
+    } catch {
+      return [];
+    }
   },
 
   saveJob(job: Omit<JobVacancy, 'id' | 'postedDate' | 'syncStatus'>): JobVacancy {
     const jobs = this.getJobs();
     const isOnline = this.isEffectivelyOnline();
+    const uid = this.getActiveUserId();
+    const profile = this.getUserProfile();
     const newJob: JobVacancy = {
       ...job,
       id: `job-${Date.now()}`,
+      postedBy: uid || undefined,
+      postedByEmail: profile.email || undefined,
+      isVerifiedEmployer: profile.isEmployerVerified || profile.roles.includes('employer') || false,
       postedDate: 'Just now',
       syncStatus: isOnline ? 'synced' : 'queued'
     };
     jobs.unshift(newJob);
     localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify(jobs));
+
+    // Save globally to Firestore
+    saveJobToFirestore(newJob);
 
     if (!isOnline) {
       this.addToSyncQueue({
@@ -521,6 +704,13 @@ export const StorageEngine = {
 
     notifyListeners();
     return newJob;
+  },
+
+  deleteJob(id: string): void {
+    const jobs = this.getJobs().filter((j) => j.id !== id);
+    localStorage.setItem(PUBLIC_STORAGE_KEYS.JOBS, JSON.stringify(jobs));
+    deleteJobFromFirestore(id);
+    notifyListeners();
   },
 
   // ================= PERSONAL DATA: JOB APPLICATIONS =================
@@ -583,6 +773,13 @@ export const StorageEngine = {
       workers.unshift(worker);
     }
     localStorage.setItem(PUBLIC_STORAGE_KEYS.WORKERS, JSON.stringify(workers));
+    notifyListeners();
+  },
+
+  deleteArtisan(id: string) {
+    const workers = this.getWorkers().filter((w) => w.id !== id);
+    localStorage.setItem(PUBLIC_STORAGE_KEYS.WORKERS, JSON.stringify(workers));
+    deleteArtisanFromFirestore(id);
     notifyListeners();
   },
 
