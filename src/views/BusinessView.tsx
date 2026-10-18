@@ -20,7 +20,14 @@ import {
   Sparkles,
   ArrowUpRight,
   ChevronLeft,
-  Lock
+  Lock,
+  Search,
+  Filter,
+  Clock,
+  BarChart3,
+  ChevronDown,
+  ChevronUp,
+  CalendarRange
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { StorageEngine } from '../db/storage';
@@ -41,6 +48,13 @@ export const BusinessView: React.FC = () => {
   const transactions: BusinessTransaction[] = useMemo(() => StorageEngine.getTransactions(), [dataVersion, currentUser]);
   const inventory: InventoryItem[] = useMemo(() => StorageEngine.getInventory(), [dataVersion, currentUser]);
   const customerCredits: CustomerCredit[] = useMemo(() => StorageEngine.getCustomerCredits(), [dataVersion, currentUser]);
+  const analytics = useMemo(() => StorageEngine.getTransactionAnalytics(), [dataVersion, currentUser]);
+
+  // Profit and Reports Filters & History State
+  const [reportRange, setReportRange] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<'all' | 'sale' | 'expense' | 'gig_payment'>('all');
+  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
 
   // Active Tab within Business
   const [bizTab, setBizTab] = useState<'cashbook' | 'inventory' | 'debtors' | 'reports'>('cashbook');
@@ -643,50 +657,421 @@ export const BusinessView: React.FC = () => {
         </div>
       )}
 
-      {/* ================= TAB 4: REPORTS ================= */}
+      {/* ================= TAB 4: PROFIT, REPORTS & TRANSACTION HISTORY LOGS ================= */}
       {bizTab === 'reports' && (
-        <div className="space-y-5">
-          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Profit &amp; Loss Statement</h3>
-                <p className="text-xs text-slate-500">Calculated directly from local transactions</p>
+        <div className="space-y-6">
+          {/* Horizon Selection & Export Header */}
+          <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-teal-600" />
+                <h3 className="text-base font-bold text-slate-900">Profit &amp; Financial Reports</h3>
               </div>
-              <button
-                onClick={exportCSV}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export CSV Report</span>
-              </button>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Calculated from daily transaction logs · Offline ledger with cloud synchronization
+              </p>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="flex items-center justify-between py-2 border-b border-slate-100">
-                <span className="font-semibold text-slate-700">Gross Sales Revenue</span>
-                <span className="font-bold text-emerald-700 text-sm tabular-nums">+${totalSales.toFixed(2)}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex p-1 bg-slate-100 rounded-xl text-xs font-semibold">
+                {[
+                  { id: 'all', label: 'All Time' },
+                  { id: 'today', label: 'Today' },
+                  { id: 'week', label: 'This Week' },
+                  { id: 'month', label: 'This Month' }
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setReportRange(item.id as any)}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      reportRange === item.id 
+                        ? 'bg-white text-slate-900 shadow-2xs font-bold' 
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
-              <div className="flex items-center justify-between py-2 border-b border-slate-100">
-                <span className="font-semibold text-slate-700">Operational &amp; Stock Expenses</span>
-                <span className="font-bold text-rose-600 text-sm tabular-nums">-${totalExpenses.toFixed(2)}</span>
+
+              <button
+                onClick={exportCSV}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition shadow-2xs"
+                title="Export complete transactions history to CSV spreadsheet"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export CSV</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3 Executive Return Cards: Daily, Weekly, and Monthly Calculations */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Daily Returns */}
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-3 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-bold text-xs">
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">Today's Returns</h4>
+                    <span className="text-[10px] text-slate-400">Daily Calculation</span>
+                  </div>
+                </div>
+                <span className={`text-xs font-black px-2 py-0.5 rounded-full ${analytics.today.profit >= 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
+                  {analytics.today.profit >= 0 ? `+${analytics.today.profit.toFixed(2)}` : analytics.today.profit.toFixed(2)}
+                </span>
               </div>
-              <div className="flex items-center justify-between py-3 bg-slate-50 px-4 rounded-xl">
-                <span className="font-extrabold text-slate-900 text-sm">Estimated Net Profit</span>
-                <span className={`text-base font-black tabular-nums ${netProfit >= 0 ? 'text-teal-700' : 'text-rose-600'}`}>
-                  ${netProfit.toFixed(2)}
+              <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-100">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-medium">Sales Income</span>
+                  <span className="font-bold text-emerald-700 tabular-nums">+${analytics.today.sales.toFixed(2)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-medium">Expenses</span>
+                  <span className="font-bold text-rose-600 tabular-nums">-${analytics.today.expenses.toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl flex items-center justify-between">
+                <span>Transactions logged today:</span>
+                <span className="font-bold text-slate-800">{analytics.today.count}</span>
+              </div>
+            </div>
+
+            {/* Weekly Returns */}
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-3 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs">
+                    <CalendarRange className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">Weekly Returns</h4>
+                    <span className="text-[10px] text-slate-400">Past 7 Days Aggregated</span>
+                  </div>
+                </div>
+                <span className={`text-xs font-black px-2 py-0.5 rounded-full ${analytics.week.profit >= 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
+                  {analytics.week.profit >= 0 ? `+${analytics.week.profit.toFixed(2)}` : analytics.week.profit.toFixed(2)}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-100">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-medium">Weekly Sales</span>
+                  <span className="font-bold text-emerald-700 tabular-nums">+${analytics.week.sales.toFixed(2)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-medium">Weekly Expenses</span>
+                  <span className="font-bold text-rose-600 tabular-nums">-${analytics.week.expenses.toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl flex items-center justify-between">
+                <span>7-Day Margin %:</span>
+                <span className="font-bold text-slate-800">
+                  {analytics.week.sales > 0 ? `${((analytics.week.profit / analytics.week.sales) * 100).toFixed(1)}%` : '0%'}
                 </span>
               </div>
             </div>
 
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                Business Health Summary
-              </h4>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Operating with ${totalSales.toFixed(2)} in total revenue across {transactions.length} recorded entries. 
-                Keep business funds separate from domestic expenses to maintain sufficient working capital for inventory restocking.
-              </p>
+            {/* Monthly Returns */}
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-3 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold text-xs">
+                    <TrendingUp className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">Monthly Returns</h4>
+                    <span className="text-[10px] text-slate-400">Past 30 Days Aggregated</span>
+                  </div>
+                </div>
+                <span className={`text-xs font-black px-2 py-0.5 rounded-full ${analytics.month.profit >= 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
+                  {analytics.month.profit >= 0 ? `+${analytics.month.profit.toFixed(2)}` : analytics.month.profit.toFixed(2)}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-100">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-medium">Monthly Sales</span>
+                  <span className="font-bold text-emerald-700 tabular-nums">+${analytics.month.sales.toFixed(2)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-medium">Monthly Expenses</span>
+                  <span className="font-bold text-rose-600 tabular-nums">-${analytics.month.expenses.toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl flex items-center justify-between">
+                <span>30-Day Margin %:</span>
+                <span className="font-bold text-slate-800">
+                  {analytics.month.sales > 0 ? `${((analytics.month.profit / analytics.month.sales) * 100).toFixed(1)}%` : '0%'}
+                </span>
+              </div>
             </div>
+          </div>
+
+          {/* Active Range Financial Performance Breakdown */}
+          {(() => {
+            const activeStats = 
+              reportRange === 'today' ? analytics.today :
+              reportRange === 'week' ? analytics.week :
+              reportRange === 'month' ? analytics.month : analytics.allTime;
+            const marginPercent = activeStats.sales > 0 ? ((activeStats.profit / activeStats.sales) * 100).toFixed(1) : '0';
+
+            return (
+              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Profit &amp; Loss Statement ({reportRange.toUpperCase()})
+                    </h3>
+                    <p className="text-xs text-slate-500">Net profitability and return calculations</p>
+                  </div>
+                  <span className="text-xs font-semibold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg">
+                    {activeStats.count} entries evaluated
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Gross Revenue</span>
+                    <span className="text-base font-black text-emerald-700 tabular-nums">+${activeStats.sales.toFixed(2)}</span>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Expenses</span>
+                    <span className="text-base font-black text-rose-600 tabular-nums">-${activeStats.expenses.toFixed(2)}</span>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Net Profit / Return</span>
+                    <span className={`text-base font-black tabular-nums ${activeStats.profit >= 0 ? 'text-teal-700' : 'text-rose-600'}`}>
+                      ${activeStats.profit.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Profit Margin</span>
+                    <span className="text-base font-black text-slate-900 tabular-nums">{marginPercent}%</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ================= DAILY TRANSACTION HISTORY LOGS ================= */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-teal-600" />
+                  <span>Daily Transaction History Logs</span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Audit trail of every daily transaction. Tap any day to expand and inspect records.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">
+                  {analytics.dailyLogs.length} logged business day{analytics.dailyLogs.length === 1 ? '' : 's'}
+                </span>
+              </div>
+            </div>
+
+            {analytics.dailyLogs.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500 rounded-2xl bg-slate-50 border border-dashed border-slate-200">
+                No transactions logged yet. Use the "Record Sale" or "Record Expense" buttons to start logging daily transactions.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {analytics.dailyLogs.map((day) => {
+                  const isExpanded = expandedDays[day.date] ?? true;
+                  return (
+                    <div 
+                      key={day.date}
+                      className="border border-slate-200 rounded-2xl overflow-hidden transition-all bg-white shadow-2xs"
+                    >
+                      {/* Day Header Bar */}
+                      <div 
+                        onClick={() => setExpandedDays((prev) => ({ ...prev, [day.date]: !isExpanded }))}
+                        className="p-3.5 bg-slate-50 hover:bg-slate-100/80 cursor-pointer flex items-center justify-between transition gap-2"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-700">
+                            <Calendar className="w-3.5 h-3.5 text-teal-600" />
+                          </div>
+                          <div>
+                            <span className="font-bold text-xs text-slate-900">{day.date}</span>
+                            <span className="text-[10px] text-slate-400 ml-2">({day.count} transaction{day.count === 1 ? '' : 's'})</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-emerald-700 font-bold tabular-nums">+${day.sales.toFixed(2)}</span>
+                            <span className="text-slate-300">|</span>
+                            <span className="text-rose-600 font-bold tabular-nums">-${day.expenses.toFixed(2)}</span>
+                            <span className="text-slate-300">|</span>
+                            <span className={`px-2 py-0.5 rounded-full font-black text-[11px] tabular-nums ${day.profit >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                              ${day.profit.toFixed(2)}
+                            </span>
+                          </div>
+                          {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                        </div>
+                      </div>
+
+                      {/* Day Items List */}
+                      {isExpanded && (
+                        <div className="divide-y divide-slate-100">
+                          {day.transactions.map((tx) => (
+                            <div key={tx.id} className="p-3 text-xs flex items-center justify-between hover:bg-slate-50/50 transition">
+                              <div className="flex items-center gap-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                  tx.type === 'expense' 
+                                    ? 'bg-rose-100 text-rose-700' 
+                                    : tx.type === 'gig_payment'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-emerald-100 text-emerald-700'
+                                }`}>
+                                  {tx.type === 'gig_payment' ? 'Gig' : tx.type}
+                                </span>
+                                <div>
+                                  <p className="font-bold text-slate-900">{tx.description || tx.category}</p>
+                                  <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                                    <span className="capitalize">{tx.category}</span>
+                                    <span>·</span>
+                                    <span className="uppercase font-semibold">{tx.paymentMethod}</span>
+                                    {tx.customerOrSupplier && (
+                                      <>
+                                        <span>·</span>
+                                        <span>{tx.customerOrSupplier}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                <span className={`font-mono font-bold text-xs tabular-nums ${
+                                  tx.type === 'expense' ? 'text-rose-600' : 'text-emerald-700'
+                                }`}>
+                                  {tx.type === 'expense' ? '-' : '+'}${tx.amount.toFixed(2)}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    if (confirm('Delete this historical transaction entry?')) {
+                                      StorageEngine.deleteTransaction(tx.id);
+                                      showToast('Transaction removed.');
+                                    }
+                                  }}
+                                  className="p-1 text-slate-300 hover:text-rose-600 transition rounded"
+                                  title="Delete transaction entry"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Master Searchable Transaction Audit Log */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Master Transaction Audit Search</h3>
+                <p className="text-xs text-slate-500">Filter, search, and verify all recorded entries</p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    placeholder="Search history..."
+                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+
+                <select
+                  value={historyTypeFilter}
+                  onChange={(e) => setHistoryTypeFilter(e.target.value as any)}
+                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold bg-white text-slate-700"
+                >
+                  <option value="all">All Types</option>
+                  <option value="sale">Sales Only</option>
+                  <option value="gig_payment">Gig Payments</option>
+                  <option value="expense">Expenses Only</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Filtered Master List */}
+            {(() => {
+              const filteredHistory = transactions.filter((t) => {
+                const matchesType = historyTypeFilter === 'all' || t.type === historyTypeFilter;
+                const q = historySearch.toLowerCase();
+                const matchesSearch = !q || 
+                  t.description?.toLowerCase().includes(q) || 
+                  t.category?.toLowerCase().includes(q) || 
+                  t.customerOrSupplier?.toLowerCase().includes(q) || 
+                  t.date?.includes(q);
+                return matchesType && matchesSearch;
+              });
+
+              if (filteredHistory.length === 0) {
+                return (
+                  <div className="p-6 text-center text-xs text-slate-400">
+                    No transactions match your search filter.
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-[10px] uppercase font-bold text-slate-400">
+                        <th className="py-2 px-3">Date</th>
+                        <th className="py-2 px-3">Type</th>
+                        <th className="py-2 px-3">Category / Details</th>
+                        <th className="py-2 px-3">Customer / Supplier</th>
+                        <th className="py-2 px-3">Payment</th>
+                        <th className="py-2 px-3 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredHistory.map((t) => (
+                        <tr key={t.id} className="hover:bg-slate-50/60 transition">
+                          <td className="py-2 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">{t.date}</td>
+                          <td className="py-2 px-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              t.type === 'expense' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                            }`}>
+                              {t.type}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="font-bold text-slate-900 block">{t.description || t.category}</span>
+                            <span className="text-[10px] text-slate-400 capitalize">{t.category}</span>
+                          </td>
+                          <td className="py-2 px-3 text-slate-600">{t.customerOrSupplier || '—'}</td>
+                          <td className="py-2 px-3 uppercase text-[10px] font-semibold text-slate-500">{t.paymentMethod}</td>
+                          <td className="py-2 px-3 text-right font-mono font-bold">
+                            <span className={t.type === 'expense' ? 'text-rose-600' : 'text-emerald-700'}>
+                              {t.type === 'expense' ? '-' : '+'}${t.amount.toFixed(2)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

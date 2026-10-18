@@ -32,7 +32,7 @@ import {
   EmployerKYC
 } from './types';
 
-export const ADMIN_EMAIL = 'comfort.designszw@gmail.com';
+export const ADMIN_EMAIL = 'admin@comfortskills.com';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);

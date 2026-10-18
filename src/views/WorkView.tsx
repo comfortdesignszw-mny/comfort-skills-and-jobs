@@ -72,8 +72,7 @@ export const WorkView: React.FC = () => {
 
   const isEmployerOrBusinessOwner = 
     userProfile.roles.includes('employer') || 
-    userProfile.roles.includes('business_owner') || 
-    currentUser?.email === 'comfort.designszw@gmail.com';
+    userProfile.roles.includes('business_owner');
 
   // Application Modal state
   const [applyingJob, setApplyingJob] = useState<JobVacancy | null>(null);
@@ -166,8 +165,7 @@ export const WorkView: React.FC = () => {
       salaryText: newJobSalary,
       description: newJobDesc || 'Job opening published via Comfort Skills & Jobs Hub employer desk.',
       responsibilities: ['Standard duties as agreed in employment terms.', 'Punctuality and dedication.'],
-      requirements: ['Basic skills in relevant trade.', 'Traceable references.'],
-      isVerifiedEmployer: userProfile.isEmployerVerified || userProfile.roles.includes('employer') || currentUser?.email === 'comfort.designszw@gmail.com',
+      isVerifiedEmployer: userProfile.isEmployerVerified || userProfile.roles.includes('employer'),
       closingDate: 'In 14 days',
       contactMethod: 'In-app application'
     });
@@ -523,8 +521,8 @@ export const WorkView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Owner / Admin Management Bar */}
-              {((currentUser && (activeJob.postedBy === currentUser.uid || activeJob.postedByEmail === currentUser.email)) || currentUser?.email === 'comfort.designszw@gmail.com') && (
+              {/* Owner Management Bar */}
+              {Boolean(currentUser && (activeJob.postedBy === currentUser.uid || (activeJob.postedByEmail && activeJob.postedByEmail === currentUser.email))) && (
                 <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
                   <div className="text-rose-900">
                     <span className="font-bold flex items-center gap-1.5">
@@ -667,7 +665,7 @@ export const WorkView: React.FC = () => {
                             Verified Employer
                           </span>
                         )}
-                        {((currentUser && (job.postedBy === currentUser.uid || job.postedByEmail === currentUser.email)) || currentUser?.email === 'comfort.designszw@gmail.com') && (
+                        {Boolean(currentUser && (job.postedBy === currentUser.uid || (job.postedByEmail && job.postedByEmail === currentUser.email))) && (
                           <span className="text-[10px] font-bold text-teal-800 bg-teal-100 px-2 py-0.5 rounded">
                             My Job
                           </span>
@@ -848,7 +846,7 @@ export const WorkView: React.FC = () => {
                           {worker.isVerified && (
                             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                           )}
-                          {((currentUser && worker.userId === currentUser.uid) || currentUser?.email === 'comfort.designszw@gmail.com') && (
+                          {Boolean(currentUser && worker.userId === currentUser.uid) && (
                             <span className="text-[10px] font-bold text-teal-800 bg-teal-100 px-1.5 py-0.2 rounded shrink-0">
                               My Profile
                             </span>
@@ -915,7 +913,7 @@ export const WorkView: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      {((currentUser && worker.userId === currentUser.uid) || currentUser?.email === 'comfort.designszw@gmail.com') && (
+                      {Boolean(currentUser && worker.userId === currentUser.uid) && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

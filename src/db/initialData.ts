@@ -115,6 +115,20 @@ export const INITIAL_COURSES: Course[] = [
             options: ['To replace all human employees immediately', 'To quickly draft price lists, customer SMS reminders, supplier inquiry letters, and social media posts', 'To print fake dollar notes', 'To mine cryptocurrency'],
             correctIndex: 1,
             explanation: 'AI provides massive leverage for everyday business communication, customer service, and proposal drafting.'
+          },
+          {
+            id: 'ai-q6',
+            question: 'When using AI to analyze an EcoCash cashbook, why should you ask the model to show its step-by-step math?',
+            options: ['To take more time', 'Because LLMs can make arithmetic calculation errors without chain-of-thought verification', 'To increase smartphone battery drain', 'It makes no difference'],
+            correctIndex: 1,
+            explanation: 'Language models predict tokens rather than using native calculator chips; demanding step-by-step steps forces accurate arithmetic calculation.'
+          },
+          {
+            id: 'ai-q7',
+            question: 'What is "prompt chaining" in professional freelance workflows?',
+            options: ['Sending prompts to multiple people', 'Breaking a complex business task into consecutive steps where one output feeds the next prompt', 'Typing identical prompts repeatedly', 'Copying and pasting text from Google'],
+            correctIndex: 1,
+            explanation: 'Prompt chaining breaks complex tasks into manageable stages (e.g. outline -> draft -> audit), ensuring vastly superior final quality.'
           }
         ]
       }
@@ -226,6 +240,20 @@ export const INITIAL_COURSES: Course[] = [
             options: ['Never', 'Regularly, to disconnect unknown web browsers or laptops', 'Once every 10 years', 'Only when buying a new phone'],
             correctIndex: 1,
             explanation: 'Checking Linked Devices ensures no unauthorized third party is silently reading your customer messages via WhatsApp Web.'
+          },
+          {
+            id: 'sec-q6',
+            question: 'A customer presents an EcoCash SMS showing payment, but your balance has not increased. What must you do before releasing goods?',
+            options: ['Trust the customer and hand over the goods', 'Dial your official USSD code (*151#) to verify that the funds actually reflect in your wallet balance', 'Take a photo of their ID and let them leave', 'Ask them to send half again'],
+            correctIndex: 1,
+            explanation: 'Scammers frequently fabricate fake SMS notification templates. Never release merchandise without verifying your real balance via USSD.'
+          },
+          {
+            id: 'sec-q7',
+            question: 'Why is connecting your smartphone to open, unencrypted public Wi-Fi networks risky for mobile money transactions?',
+            options: ['Public Wi-Fi drains battery faster', 'Adversaries on the same network can intercept unencrypted data packets and redirect you to fake banking portals', 'Public Wi-Fi turns off phone audio', 'It changes your phone number'],
+            correctIndex: 1,
+            explanation: 'Rogue hotspots allow attackers to stage man-in-the-middle attacks or capture login session tokens. Always use cellular data or a trusted VPN.'
           }
         ]
       }
@@ -340,6 +368,20 @@ export const INITIAL_COURSES: Course[] = [
             options: ['Apply firm, direct pressure over the wound with a sterile dressing and elevate the limb', 'Wash the wound with hot soapy water', 'Leave it open to the air', 'Wait 24 hours before touching it'],
             correctIndex: 0,
             explanation: 'Direct firm pressure is the fastest and most effective way to stem serious blood loss.'
+          },
+          {
+            id: 'fa-q6',
+            question: 'A construction worker falls from a 3-meter scaffolding and complains of severe neck pain. What is your priority?',
+            options: ['Help them walk around immediately', 'Keep their head and neck immobilized in a neutral position and do not move them until emergency paramedics arrive', 'Give them a cold soda to drink', 'Sit them upright on a stool'],
+            correctIndex: 1,
+            explanation: 'Suspected spinal injuries require complete manual cervical stabilization to prevent permanent paralysis or spinal cord severing.'
+          },
+          {
+            id: 'fa-q7',
+            question: 'During a hot October afternoon, a workshop apprentice stops sweating, has hot dry skin, and becomes delirious. What condition is this?',
+            options: ['Mild thirst', 'Life-threatening Heat Stroke requiring immediate full-body cooling and emergency medical evacuation', 'Normal tiredness', 'Common cold'],
+            correctIndex: 1,
+            explanation: 'Absence of sweating with altered mental status signifies Heat Stroke, a critical medical emergency requiring aggressive cooling.'
           }
         ]
       }
@@ -453,6 +495,20 @@ export const INITIAL_COURSES: Course[] = [
             options: ['0 degrees flat on the table', '70° to 80° in the direction of travel', 'Directly backwards at 180°', 'Spinning constantly in circles'],
             correctIndex: 1,
             explanation: 'A 70° to 80° push/drag travel angle provides optimal penetration and clean slag coverage.'
+          },
+          {
+            id: 'weld-q6',
+            question: 'What is "undercut" in arc welding and why is it considered a defect in structural steel?',
+            options: ['A groove melted into the base metal along the weld toe that weakens structural integrity', 'Welding underneath a car', 'Cutting metal with a handsaw', 'Using an extra long cable'],
+            correctIndex: 0,
+            explanation: 'Undercut creates a notch along the toe of the weld bead that concentrates mechanical stress and can cause premature structural failure.'
+          },
+          {
+            id: 'weld-q7',
+            question: 'What is the recommended welding current (amperage) range for a standard 3.2mm E6013 mild steel electrode?',
+            options: ['20 to 35 Amps', '90 to 130 Amps', '350 to 500 Amps', '1000 Amps'],
+            correctIndex: 1,
+            explanation: 'A 3.2mm (1/8") E6013 general-purpose electrode operates smoothly between 90 and 130 amps depending on plate thickness and position.'
           }
         ]
       }
@@ -566,6 +622,20 @@ export const INITIAL_COURSES: Course[] = [
             options: ['To wash off all the red color', 'To prevent the dry brick from rapidly sucking moisture out of the wet mortar before it cures', 'To cool the bricklayer’s hands', 'To make them lighter to carry'],
             correctIndex: 1,
             explanation: 'Dry porous bricks absorb the mixing water from the mortar too rapidly, resulting in weak, powdery joints.'
+          },
+          {
+            id: 'brick-q6',
+            question: 'How long should newly laid cement mortar brickwork be kept moist (cured) with water sprays for optimal structural compressive strength?',
+            options: ['10 minutes only', 'At least 5 to 7 days of damp curing', 'Never wet cement once laid', 'One full year'],
+            correctIndex: 1,
+            explanation: 'Hydration of Portland cement requires moisture over 5 to 7 days; proper curing nearly doubles the compressive strength of masonry.'
+          },
+          {
+            id: 'brick-q7',
+            question: 'What is the standard specified mortar joint thickness in quality brickwork construction in Zimbabwe?',
+            options: ['2 millimeters', '10 to 12 millimeters (approx. 1/2 inch)', '50 millimeters', '100 millimeters'],
+            correctIndex: 1,
+            explanation: 'Standard mortar bed and perp joints are 10mm to 12mm thick to provide structural cushion without excessive shrinkage.'
           }
         ]
       }
@@ -679,6 +749,20 @@ export const INITIAL_COURSES: Course[] = [
             options: ['Across the grain at 90 degrees', 'In the direction of the wood grain to prevent tear-out', 'Backwards against the blade', 'In rapid circles'],
             correctIndex: 1,
             explanation: 'Planing with the grain produces smooth shaving without gouging or tearing wood fibers.'
+          },
+          {
+            id: 'carp-q6',
+            question: 'Why must timber be properly seasoned or kiln-dried before crafting kitchen cabinets or doors?',
+            options: ['To make it smell nice', 'Unseasoned green timber will shrink, twist, cup, and crack as it loses moisture in dry air', 'To change its natural color to white', 'To make it heavier'],
+            correctIndex: 1,
+            explanation: 'Green wood has high cellular moisture; drying down to 10-12% moisture content prevents warping and joint separation.'
+          },
+          {
+            id: 'carp-q7',
+            question: 'Which joint provides superior structural mechanical strength for joining solid wood table legs to aprons?',
+            options: ['Simple butt joint with wood glue only', 'Mortise and tenon joint with tight mechanical interlock', 'Stapling cardboard together', 'Tying with string'],
+            correctIndex: 1,
+            explanation: 'Mortise and tenon joints provide extensive long-grain-to-long-grain glue surface and mechanical resistance against racking forces.'
           }
         ]
       }
@@ -792,6 +876,20 @@ export const INITIAL_COURSES: Course[] = [
             options: ['The car needs petrol', 'The brake pads are worn down to the acoustic wear indicators and must be replaced immediately', 'The tires have too much air', 'The radio is faulty'],
             correctIndex: 1,
             explanation: 'Brake pads contain built-in metal tabs that contact the brake rotor to alert the driver when friction lining drops below 2-3mm.'
+          },
+          {
+            id: 'mech-q6',
+            question: 'What does an OBD2 diagnostic trouble code P0300 indicate when scanned on a vehicle engine ECU?',
+            options: ['Low washer fluid level', 'Random or multiple cylinder engine misfire detected', 'Flat tire', 'Air conditioning fan faulty'],
+            correctIndex: 1,
+            explanation: 'Code P0300 indicates that the crankshaft position sensor detected rotational speed variations caused by misfires in multiple cylinders.'
+          },
+          {
+            id: 'mech-q7',
+            question: 'When testing engine cylinder compression with a pressure gauge, what variance between the highest and lowest cylinder is acceptable?',
+            options: ['No more than 10% to 15% variation between cylinders', '50% variation', '90% variation', 'Any variation is fine'],
+            correctIndex: 0,
+            explanation: 'Healthy engines exhibit balanced compression across all cylinders; variance exceeding 10-15% points to burnt valves, worn rings, or head gasket leaks.'
           }
         ]
       }
@@ -905,6 +1003,20 @@ export const INITIAL_COURSES: Course[] = [
             options: ['To show off to the customer', 'Once glued down, parts suppliers will void the return warranty if the screen turns out to be defective', 'Because glue ruins the pixels', 'To save battery power'],
             correctIndex: 1,
             explanation: 'Parts vendors will only exchange defective LCDs if they have not been glued and the protective film is intact.'
+          },
+          {
+            id: 'phone-q6',
+            question: 'When diagnosing a phone that refuses to turn on, which multimeter setting is used to detect direct shorts to ground on VDD_MAIN?',
+            options: ['AC High Voltage mode', 'Diode / Continuity mode measuring voltage drop and resistance to ground (GND)', 'Battery amp meter mode', 'Temperature probe mode'],
+            correctIndex: 1,
+            explanation: 'Diode mode detects shorted decoupling capacitors on primary power rails (e.g. reading near 0.000V to ground indicates a direct short).'
+          },
+          {
+            id: 'phone-q7',
+            question: 'What is the maximum safe hot air rework station temperature range when lifting delicate SMD IC chips without blistering the PCB?',
+            options: ['150°C', '330°C to 360°C with even circular air motion', '600°C concentrated on one spot', '1000°C'],
+            correctIndex: 1,
+            explanation: 'Leaded solder melts at 183°C and lead-free at 217°C; hot air between 330°C and 360°C melts the balls without delaminating board layers.'
           }
         ]
       }
@@ -1018,6 +1130,20 @@ export const INITIAL_COURSES: Course[] = [
             options: ['1 to 2 hours', '5 to 6 hours', '12 hours', '24 hours'],
             correctIndex: 1,
             explanation: 'Zimbabwe enjoys world-class solar irradiance averaging 5 to 6 peak sun hours per day throughout the year.'
+          },
+          {
+            id: 'solar-q6',
+            question: 'What is the primary usable capacity difference between a 100Ah Lithium LiFePO4 battery and a 100Ah Lead-Acid / Gel battery?',
+            options: ['Lithium batteries safely provide 80% to 90% usable capacity compared to only 50% for Lead-Acid', 'Lead-acid holds 10 times more power', 'There is no difference', 'Lithium only works during the night'],
+            correctIndex: 0,
+            explanation: 'Lithium LiFePO4 chemistry safely tolerates 80-90% Depth of Discharge with 3000+ cycles, effectively delivering nearly double the usable energy of gel.'
+          },
+          {
+            id: 'solar-q7',
+            question: 'What is the electrical safety purpose of driving a copper earth rod deep into the ground at a domestic solar installation?',
+            options: ['To attract lightning strikes to the house', 'To provide a low-resistance path to dissipate lightning surges and prevent dangerous chassis touch-voltages', 'To save on wire costs', 'To hold the inverter upright'],
+            correctIndex: 1,
+            explanation: 'Earthing bonds all metal casings and SPD surge protectors to ground, safely carrying fault currents away from human occupants.'
           }
         ]
       }
@@ -1129,6 +1255,20 @@ export const INITIAL_COURSES: Course[] = [
             options: ['Leather chisel needle', 'Ballpoint / Jersey needle', 'Hand sewing needle', 'Heavy embroidery needle'],
             correctIndex: 1,
             explanation: 'Ballpoint needles push between knit fibers rather than piercing and tearing them, preventing skipped stitches and holes.'
+          },
+          {
+            id: 'tailor-q6',
+            question: 'Why must the front armhole and front neckline of a garment pattern be cut deeper than the back pieces?',
+            options: ['To save cloth', 'To accommodate the natural anatomical curvature and forward arm movement of the human body', 'It is only done for decorative fashion', 'Because scissors cut deeper on the right'],
+            correctIndex: 1,
+            explanation: 'Human shoulders curve forward; cutting front armholes and necklines deeper ensures natural comfort and prevents fabric bunching.'
+          },
+          {
+            id: 'tailor-q7',
+            question: 'If thread nests and loops appear underneath your fabric while sewing on a lockstitch machine, what is the usual culprit?',
+            options: ['The bobbin is missing', 'The top upper thread tension is too loose or the upper thread is not seated properly in the tension disks', 'The motor is running backwards', 'The cloth is too expensive'],
+            correctIndex: 1,
+            explanation: 'Loops underneath the fabric are caused by slack in the upper thread. Re-threading with the presser foot up seats thread in the tension disks.'
           }
         ]
       }
@@ -1240,6 +1380,20 @@ export const INITIAL_COURSES: Course[] = [
             options: ['Give credit to everyone without limits', 'Set a strict limit (e.g. max 10% of inventory) and do not grant new credit until previous debt is paid in full', 'Never ask for the money back', 'Borrow from loan sharks to give credit'],
             correctIndex: 1,
             explanation: 'Capping credit and requiring full settlement prevents unpaid customer debts from freezing your operating capital.'
+          },
+          {
+            id: 'book-q6',
+            question: 'If an item costs you $8 to purchase from a wholesale supplier and you sell it for $10 in your shop, what is your gross profit margin percentage?',
+            options: ['2%', '20% (Profit of $2 divided by Selling Price of $10)', '80%', '100%'],
+            correctIndex: 1,
+            explanation: 'Profit Margin = (Profit / Revenue) * 100. $2 profit / $10 selling price = 20% gross profit margin.'
+          },
+          {
+            id: 'book-q7',
+            question: 'Why is "mixing the till" (taking business cash directly for personal household groceries without recording it) the primary cause of small enterprise collapse?',
+            options: ['It makes the notes dirty', 'It secretly depletes stock re-order capital until the owner can no longer restock the shelves', 'It increases taxes', 'Bank tellers will refuse deposits'],
+            correctIndex: 1,
+            explanation: 'Unrecorded personal withdrawals bleed working capital, causing a death spiral where inventory vanishes and the shop runs dry.'
           }
         ]
       }

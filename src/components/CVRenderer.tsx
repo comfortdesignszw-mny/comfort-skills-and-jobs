@@ -19,7 +19,25 @@ interface CVRendererProps {
   template: CVTemplateId;
 }
 
-export const CVRenderer: React.FC<CVRendererProps> = ({ profile, certificates, template }) => {
+export const CVRenderer: React.FC<CVRendererProps> = ({ profile: rawProfile, certificates, template }) => {
+  const cv = rawProfile.cvDetails;
+  const profile: UserProfile = {
+    ...rawProfile,
+    fullName: cv?.fullName || rawProfile.fullName || 'Comfort Member',
+    headline: cv?.headline || rawProfile.headline || 'Vocational Artisan & Technical Specialist',
+    phone: cv?.phone || rawProfile.phone || '+263 77 234 5678',
+    email: cv?.email || rawProfile.email || 'artisan@comfortskills.com',
+    suburb: cv?.suburb || rawProfile.suburb || 'Bulawayo CBD',
+    city: cv?.city || rawProfile.city || 'Bulawayo',
+    bio: cv?.summary || rawProfile.bio || 'Dedicated, reliable technician with certified vocational competence and proven field experience.',
+    driverLicense: cv?.driverLicense || rawProfile.driverLicense,
+    skills: cv?.skills && cv.skills.length > 0 ? cv.skills : rawProfile.skills,
+    languages: cv?.languages && cv.languages.length > 0 ? cv.languages : rawProfile.languages,
+    customCertifications: cv?.customCertifications || rawProfile.customCertifications,
+    structuredExperiences: cv?.experiences && cv.experiences.length > 0 ? cv.experiences : rawProfile.structuredExperiences,
+    structuredEducations: cv?.educations && cv.educations.length > 0 ? cv.educations : rawProfile.structuredEducations,
+    structuredReferences: cv?.references && cv.references.length > 0 ? cv.references : rawProfile.structuredReferences,
+  };
   const experiences = profile.structuredExperiences && profile.structuredExperiences.length > 0
     ? profile.structuredExperiences
     : profile.workExperience

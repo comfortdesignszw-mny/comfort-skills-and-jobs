@@ -147,7 +147,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, default
               <div>
                 <h3 className="text-sm font-bold text-slate-900 mb-1">5. Contact &amp; Data Rights</h3>
                 <p>
-                  To request account deletion or data correction, contact Comfort Designs at +263772824132 or email comfort.designszw@gmail.com.
+                  To request account deletion or data correction, contact the platform team at +263772824132 or email support@comfortskills.com.
                 </p>
               </div>
             </>

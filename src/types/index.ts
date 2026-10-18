@@ -289,10 +289,31 @@ export interface UserProfile {
   structuredEducations?: CVEducation[];
   structuredReferences?: CVReference[];
   customCertifications?: string[];
+  // Separate Professional CV Details
+  cvDetails?: CVDetails;
   // Employer Verification & KYC
   isEmployerVerified?: boolean;
   employerKYCStatus?: 'none' | 'pending' | 'verified' | 'rejected';
   employerKYC?: EmployerKYC;
+}
+
+export interface CVDetails {
+  fullName: string;
+  phone: string;
+  email: string;
+  suburb: string;
+  city: string;
+  headline: string;
+  summary: string;
+  driverLicense?: string;
+  languages: string[];
+  skills: string[];
+  experiences: CVExperience[];
+  educations: CVEducation[];
+  references: CVReference[];
+  customCertifications?: string[];
+  template: CVTemplateId;
+  lastSyncedWithProfile?: string;
 }
 
 export interface SyncQueueItem {

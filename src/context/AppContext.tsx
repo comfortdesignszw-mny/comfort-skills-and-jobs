@@ -3,7 +3,7 @@ import { CurrencyType, LanguageType, UserProfile, SyncQueueItem } from '../types
 import { StorageEngine } from '../db/storage';
 import { t } from '../utils/i18n';
 import { getTimeGreeting } from '../utils/greeting';
-import { auth, FirebaseUser, syncUserProfileWithFirestore } from '../firebase';
+import { auth, FirebaseUser, syncUserProfileWithFirestore, ADMIN_EMAIL } from '../firebase';
 import { onAuthStateChanged, signOut as fbSignOut } from 'firebase/auth';
 
 export type NavTab = 'home' | 'learn' | 'work' | 'business' | 'profile';
@@ -76,30 +76,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
-  // Monitor Firebase Auth state & enforce account-isolated privacy
+  // Instant 0ms offline startup from local storage cache (Zero HTTP handshake)
+  useEffect(() => {
+    const localUid = StorageEngine.getActiveUserId();
+    if (localUid) {
+      const localProfile = StorageEngine.getUserProfile();
+      setCurrentUser({
+        uid: localUid,
+        email: localProfile.email || 'member@comfortskills.com',
+        displayName: localProfile.fullName || 'Member',
+        isAnonymous: false,
+        emailVerified: true
+      } as any);
+    }
+    setAuthLoading(false);
+  }, []);
+
+  // Monitor Firebase Auth state & enforce account-isolated privacy without blocking offline use
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setAuthLoading(false);
       if (user) {
+        setCurrentUser(user);
         StorageEngine.setActiveUser(user.uid);
         // Silent non-blocking profile synchronization in background
         syncUserProfileWithFirestore(user).then((synced) => {
           const currentProfile = StorageEngine.getUserProfile();
-          const isAdmin = user.email === 'comfort.designszw@gmail.com';
-          StorageEngine.saveUserProfile({
+          const isAdmin = Boolean(user.email && (user.email === ADMIN_EMAIL || user.email.startsWith('admin@')));
+          const merged: UserProfile = {
             ...currentProfile,
             ...synced,
             fullName: synced.fullName || user.displayName || currentProfile.fullName || 'Member',
             email: user.email || currentProfile.email,
             isEmployerVerified: isAdmin ? true : currentProfile.isEmployerVerified,
             employerKYCStatus: isAdmin ? 'verified' : (currentProfile.employerKYCStatus || 'none')
-          });
+          };
+          StorageEngine.saveUserProfile(merged);
+          // Cache credentials locally so offline login works seamlessly
+          if (user.email) {
+            StorageEngine.saveOfflineCredentials(user.email, 'cached_session', user.uid, merged);
+          }
         }).catch((e) => {
           console.warn('Silent offline startup - profile loaded from local storage cache:', e);
         });
       } else {
-        StorageEngine.setActiveUser(null);
+        // If device is offline, keep cached offline user session
+        if (navigator.onLine && !StorageEngine.getIsForceOffline() && !StorageEngine.getActiveUserId()) {
+          setCurrentUser(null);
+        }
       }
     });
     return () => unsubscribe();
@@ -117,8 +140,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
 
+  // Sync at every moment of active connection detection
   useEffect(() => {
-    const handleOnline = () => setNativeOnline(true);
+    const handleOnline = () => {
+      setNativeOnline(true);
+      if (!StorageEngine.getIsForceOffline()) {
+        StorageEngine.synchronizeNow().then((res) => {
+          if (res.syncedCount > 0) {
+            showToast(`Connection detected: ${res.syncedCount} offline record(s) synchronized!`);
+          }
+        }).catch((e) => {
+          console.warn('Auto sync on online detection:', e);
+        });
+      }
+    };
     const handleOffline = () => setNativeOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);

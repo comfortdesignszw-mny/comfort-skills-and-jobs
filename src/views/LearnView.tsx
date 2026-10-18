@@ -73,6 +73,127 @@ export const LearnView: React.FC = () => {
     showToast(isNowDownloaded ? 'Course saved to phone storage. Ready for offline learning.' : 'Course removed from offline memory.');
   };
 
+  const handleDownloadCourseGuide = (course: Course, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    let text = `=======================================================\n`;
+    text += `COMFORT SKILLS & JOBS HUB - VOCATIONAL STUDY MANUAL\n`;
+    text += `Course: ${course.title.toUpperCase()}\n`;
+    text += `Category: ${course.categoryLabel} | Level: ${course.difficulty}\n`;
+    text += `Duration: ${course.durationHours} Hours | Storage: ${course.storageSizeMb} MB\n`;
+    text += `=======================================================\n\n`;
+
+    text += `1. COURSE DESCRIPTION & CAREER PATHWAY\n`;
+    text += `${course.description}\n\n`;
+    if (course.careerPathway) {
+      text += `Target Job Title: ${course.careerPathway.recommendedJobTitle}\n`;
+      text += `Gig Service Trade: ${course.careerPathway.recommendedGigCategory}\n`;
+      text += `Potential Income Range: ${course.careerPathway.potentialIncomeRange}\n\n`;
+    }
+
+    if (course.startupGuide) {
+      text += `2. STARTUP KIT & ARTISAN EQUIPMENT\n`;
+      text += `Recommended Tools:\n${course.startupGuide.equipmentNeeded.map((e) => `  - ${e}`).join('\n')}\n`;
+      text += `Pricing Guide: ${course.startupGuide.suggestedPricing}\n`;
+      text += `Client Acquisition Strategy: ${course.startupGuide.firstCustomerStrategy}\n\n`;
+    }
+
+    text += `3. LESSON MODULES & DETAILED WORKSHOP NOTES\n\n`;
+    course.lessons.forEach((lesson, index) => {
+      text += `-------------------------------------------------------\n`;
+      text += `MODULE ${index + 1}: ${lesson.title.toUpperCase()}\n`;
+      text += `-------------------------------------------------------\n\n`;
+
+      if (lesson.detailedNotes) {
+        text += `[Core Overview]\n${lesson.detailedNotes.overview}\n\n`;
+        text += `[Core Principles]\n${lesson.detailedNotes.corePrinciples.map((p) => `  * ${p}`).join('\n')}\n\n`;
+        if (lesson.detailedNotes.safetyProtocols) {
+          text += `[Safety Protocols]\n${lesson.detailedNotes.safetyProtocols.map((s) => `  ! ${s}`).join('\n')}\n\n`;
+        }
+        if (lesson.detailedNotes.troubleshootingTips) {
+          text += `[Troubleshooting & Diagnostics]\n${lesson.detailedNotes.troubleshootingTips.map((t) => `  > ${t}`).join('\n')}\n\n`;
+        }
+        if (lesson.detailedNotes.zimbabweContext) {
+          text += `[Zimbabwe & Bulawayo Market Context]\n${lesson.detailedNotes.zimbabweContext}\n\n`;
+        }
+      }
+
+      text += `[Step-by-Step Practical Workshop Instructions]\n`;
+      lesson.content.forEach((step, sIdx) => {
+        text += `  Step ${sIdx + 1}: ${step}\n`;
+      });
+      text += `\n`;
+
+      if (lesson.visualDiagram) {
+        text += `[Technical Schematic: ${lesson.visualDiagram.title}]\n`;
+        text += `Summary: ${lesson.visualDiagram.caption}\n`;
+        if (lesson.visualDiagram.steps) {
+          lesson.visualDiagram.steps.forEach((st) => text += `  -> ${st}\n`);
+        }
+        text += `\n`;
+      }
+
+      if (lesson.practicalTip) {
+        text += `[Artisan Master Tip]\n${lesson.practicalTip}\n\n`;
+      }
+
+      if (lesson.resources && lesson.resources.length > 0) {
+        text += `[Study Resources & Checklists]\n`;
+        lesson.resources.forEach((r) => {
+          text += `  * ${r.title} (${r.type.toUpperCase()}): ${r.description}\n`;
+          r.keyPoints.forEach((kp) => text += `      - ${kp}\n`);
+        });
+        text += `\n`;
+      }
+
+      if (lesson.quiz && lesson.quiz.length > 0) {
+        text += `[Self-Testing Examination Review Questions (${lesson.quiz.length} Questions)]\n`;
+        lesson.quiz.forEach((q, qIdx) => {
+          text += `  Q${qIdx + 1}: ${q.question}\n`;
+          q.options.forEach((opt, oIdx) => {
+            text += `      ${String.fromCharCode(65 + oIdx)}) ${opt}\n`;
+          });
+          text += `      Correct Answer: Option ${String.fromCharCode(65 + q.correctIndex)}\n`;
+          text += `      Explanation: ${q.explanation}\n\n`;
+        });
+      }
+    });
+
+    text += `=======================================================\n`;
+    text += `Issued by Comfort Skills & Jobs Hub · Bulawayo, Zimbabwe\n`;
+    text += `Offline Vocational Learning Guide · Pass Mark > 70%\n`;
+    text += `=======================================================\n`;
+
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${course.title.replace(/[^a-zA-Z0-9]/g, '_')}_Study_Guide.txt`;
+    a.click();
+    showToast('Complete Course Study Manual downloaded for offline learning!');
+  };
+
+  const handleDownloadCheatsheet = (res: { title: string; type: string; description: string; keyPoints: string[] }, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    let text = `=======================================================\n`;
+    text += `COMFORT SKILLS HUB - ${res.title.toUpperCase()}\n`;
+    text += `Type: ${res.type.toUpperCase()}\n`;
+    text += `=======================================================\n\n`;
+    text += `${res.description}\n\n`;
+    text += `KEY CHECKPOINTS:\n`;
+    res.keyPoints.forEach((kp, idx) => {
+      text += `${idx + 1}. ${kp}\n`;
+    });
+    text += `\nGenerated from Comfort Skills & Jobs Hub · Offline Study Material\n`;
+
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${res.title.replace(/[^a-zA-Z0-9]/g, '_')}_Cheatsheet.txt`;
+    a.click();
+    showToast(`Cheatsheet "${res.title}" downloaded.`);
+  };
+
   const handleSelectQuizOption = (questionId: string, optionIndex: number) => {
     if (quizSubmitted) return;
     setQuizAnswers((prev) => ({ ...prev, [questionId]: optionIndex }));
@@ -338,7 +459,15 @@ export const LearnView: React.FC = () => {
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg">
               {activeCourse.categoryLabel}
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={(e) => handleDownloadCourseGuide(activeCourse, e)}
+                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border border-teal-600 bg-teal-50 text-teal-800 hover:bg-teal-100 transition shadow-2xs"
+                title="Download complete offline study manual"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Download Study Manual</span>
+              </button>
               <button
                 onClick={(e) => handleDownloadToggle(activeCourse.id, e)}
                 className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border transition ${
@@ -565,9 +694,17 @@ export const LearnView: React.FC = () => {
                       <Bookmark className="w-4 h-4 text-teal-600" />
                       {res.title}
                     </h4>
-                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
-                      {res.type}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => handleDownloadCheatsheet(res, e)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2.5 py-1 rounded-lg transition"
+                      >
+                        <Download className="w-3 h-3" /> Download Sheet
+                      </button>
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
+                        {res.type}
+                      </span>
+                    </div>
                   </div>
                   <p className="text-xs text-slate-600">
                     {res.description}

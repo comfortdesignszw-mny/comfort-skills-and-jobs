@@ -26,6 +26,7 @@ import {
   updateProfile 
 } from 'firebase/auth';
 import { useApp } from '../context/AppContext';
+import { StorageEngine } from '../db/storage';
 import { LegalModal } from './LegalModal';
 
 interface AuthModalProps {
@@ -113,8 +114,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     const effectiveEmail = getEffectiveEmail(identifier);
-    setIsLoading(true);
-    setErrorMessage(null);
+    // Check if offline or flight mode is active
+    const isOffline = !navigator.onLine || StorageEngine.getIsForceOffline();
+
+    if (isOffline) {
+      if (mode === 'signup') {
+        const isPhoneUsed = isPhoneNumber(identifier);
+        const res = StorageEngine.registerOffline(identifier, password, {
+          fullName: fullName.trim() || userProfile.fullName || 'Member',
+          email: isPhoneUsed ? userProfile.email : effectiveEmail,
+          phone: isPhoneUsed ? identifier.trim() : userProfile.phone,
+          suburb: suburb || userProfile.suburb
+        });
+        updateUserProfile(res.profile);
+        showToast(`Account created offline! Full access enabled. Will sync when reconnected.`);
+        setIsLoading(false);
+        onClose();
+        return;
+      } else {
+        const offRes = StorageEngine.authenticateOffline(identifier, password);
+        if (offRes.success && offRes.profile) {
+          updateUserProfile(offRes.profile);
+          showToast(`Logged in offline! Welcome back, ${offRes.profile.fullName || 'Member'}.`);
+          setIsLoading(false);
+          onClose();
+          return;
+        } else {
+          setErrorMessage(offRes.error || 'Offline credentials not found. Connect to internet or register.');
+          setIsLoading(false);
+          return;
+        }
+      }
+    }
 
     try {
       if (mode === 'signup') {
@@ -133,12 +164,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         // Persist new user document in Firestore database
         const firestoreProfile = await syncUserProfileWithFirestore(userCred.user, newProfileData);
-
-        updateUserProfile({
+        const merged = {
           ...userProfile,
           ...newProfileData,
           ...firestoreProfile
-        });
+        };
+
+        updateUserProfile(merged);
+        // Cache credentials locally so user can authenticate 100% offline next time
+        StorageEngine.saveOfflineCredentials(identifier, password, userCred.user.uid, merged);
 
         showToast(`Account created and saved to database! Welcome, ${fullName || 'to Comfort Hub'}.`);
         onClose();
@@ -149,12 +183,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         const firestoreProfile = await syncUserProfileWithFirestore(userCred.user);
         
         const isPhoneUsed = isPhoneNumber(identifier);
-        updateUserProfile({
+        const merged = {
           ...userProfile,
           ...firestoreProfile,
           fullName: firestoreProfile.fullName || userCred.user.displayName || userProfile.fullName,
           phone: isPhoneUsed ? identifier.trim() : (firestoreProfile.phone || userProfile.phone)
-        });
+        };
+        updateUserProfile(merged);
+
+        // Cache credentials locally for future offline logins
+        StorageEngine.saveOfflineCredentials(identifier, password, userCred.user.uid, merged);
 
         const displayName = firestoreProfile.fullName || userCred.user.displayName || userProfile.fullName;
         showToast(`Welcome back, ${displayName}! Account loaded from cloud.`);
@@ -162,6 +200,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
     } catch (err: any) {
       console.error(err);
+      if (err.code === 'auth/network-request-failed') {
+        // Network handshake failed - fallback to offline authentication cache
+        const offRes = StorageEngine.authenticateOffline(identifier, password);
+        if (offRes.success && offRes.profile) {
+          updateUserProfile(offRes.profile);
+          showToast(`Network unavailable: Authenticated locally via offline storage!`);
+          onClose();
+          return;
+        }
+      }
+
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setErrorMessage('Invalid phone number/email or incorrect password.');
       } else if (err.code === 'auth/email-already-in-use') {

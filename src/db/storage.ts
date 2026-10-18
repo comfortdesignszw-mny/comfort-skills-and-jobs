@@ -11,7 +11,8 @@ import {
   Certificate,
   SyncQueueItem,
   CourseProgress,
-  EmployerKYC
+  EmployerKYC,
+  CVDetails
 } from '../types';
 import { 
   INITIAL_COURSES, 
@@ -48,7 +49,7 @@ import {
 } from '../firebase';
 
 const PUBLIC_STORAGE_KEYS = {
-  COURSES: 'comfort_hub_courses_v3',
+  COURSES: 'comfort_hub_courses_v5',
   JOBS: 'comfort_hub_jobs_v3',
   WORKERS: 'comfort_hub_workers_v4',
   GIG_REQUESTS: 'comfort_hub_gig_requests_v4',
@@ -112,6 +113,73 @@ export const StorageEngine = {
     const uid = this.getActiveUserId();
     if (!uid) return `comfort_hub_guest_${suffix}`;
     return `comfort_hub_user_${uid}_${suffix}`;
+  },
+
+  // ================= 100% OFFLINE AUTHENTICATION & SESSION CACHE =================
+  getOfflineAccounts(): Record<string, { uid: string; identifier: string; passwordHash: string; profile: UserProfile }> {
+    const raw = localStorage.getItem('comfort_hub_offline_auth_accounts_v1');
+    return raw ? JSON.parse(raw) : {};
+  },
+
+  saveOfflineCredentials(identifier: string, password: string, uid: string, profile: UserProfile) {
+    try {
+      const accounts = this.getOfflineAccounts();
+      const cleanId = identifier.trim().toLowerCase();
+      const passwordHash = btoa(password);
+      accounts[cleanId] = { uid, identifier: cleanId, passwordHash, profile };
+      localStorage.setItem('comfort_hub_offline_auth_accounts_v1', JSON.stringify(accounts));
+    } catch (e) {
+      console.warn('Could not cache offline credentials:', e);
+    }
+  },
+
+  authenticateOffline(identifier: string, password: string): { success: boolean; profile?: UserProfile; uid?: string; error?: string } {
+    const accounts = this.getOfflineAccounts();
+    const cleanId = identifier.trim().toLowerCase();
+    const account = accounts[cleanId];
+    if (!account) {
+      return { 
+        success: false, 
+        error: 'No offline credentials cached on this device for this phone/email. Connect to the internet once to synchronize.' 
+      };
+    }
+    if (account.passwordHash !== btoa(password)) {
+      return { 
+        success: false, 
+        error: 'Incorrect offline password. Please verify your credentials.' 
+      };
+    }
+    this.setActiveUser(account.uid);
+    this.saveUserProfile(account.profile);
+    return { success: true, profile: account.profile, uid: account.uid };
+  },
+
+  registerOffline(identifier: string, password: string, initialProfile: Partial<UserProfile>): { success: boolean; profile: UserProfile; uid: string } {
+    const cleanId = identifier.trim().toLowerCase();
+    const uid = `offline_user_${Date.now()}`;
+    const newProfile: UserProfile = {
+      ...DEFAULT_USER_PROFILE,
+      ...initialProfile,
+      id: uid,
+      email: cleanId.includes('@') ? cleanId : (initialProfile.email || ''),
+      phone: !cleanId.includes('@') ? identifier.trim() : (initialProfile.phone || '')
+    };
+
+    this.saveOfflineCredentials(cleanId, password, uid, newProfile);
+    this.setActiveUser(uid);
+    this.saveUserProfile(newProfile);
+
+    // Queue sync for when network connection is detected
+    this.addToSyncQueue({
+      id: `sync-auth-${Date.now()}`,
+      title: 'Offline Registered Account',
+      entityType: 'application',
+      payload: { uid, identifier: cleanId, profile: newProfile },
+      createdAt: new Date().toISOString(),
+      status: 'queued'
+    });
+
+    return { success: true, profile: newProfile, uid };
   },
 
   /**
@@ -655,6 +723,18 @@ export const StorageEngine = {
       this.saveUserProfile(profile);
     }
 
+    try {
+      const cv = this.getCVDetails();
+      const certEntry = `${newCert.courseTitle} Certificate (Earned ${newCert.dateEarned}, Score: ${newCert.scorePercent}%)`;
+      if (!cv.customCertifications) cv.customCertifications = [];
+      if (!cv.customCertifications.includes(certEntry)) {
+        cv.customCertifications.push(certEntry);
+        this.saveCVDetails(cv);
+      }
+    } catch (e) {
+      console.warn('Could not auto-add cert to CV:', e);
+    }
+
     notifyListeners();
     return newCert;
   },
@@ -982,6 +1062,60 @@ export const StorageEngine = {
     notifyListeners();
   },
 
+  getTransactionAnalytics() {
+    const txs = this.getTransactions();
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const calcStats = (list: BusinessTransaction[]) => {
+      const sales = list.filter((t) => t.type === 'sale' || t.type === 'gig_payment').reduce((s, t) => s + t.amount, 0);
+      const expenses = list.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+      return {
+        sales,
+        expenses,
+        profit: sales - expenses,
+        count: list.length
+      };
+    };
+
+    const todayTxs = txs.filter((t) => t.date === todayStr);
+    const weekTxs = txs.filter((t) => t.date >= sevenDaysAgo);
+    const monthTxs = txs.filter((t) => t.date >= thirtyDaysAgo);
+
+    // Group all transactions by Date for historical log breakdown
+    const dayMap = new Map<string, BusinessTransaction[]>();
+    txs.forEach((t) => {
+      const d = t.date || todayStr;
+      if (!dayMap.has(d)) dayMap.set(d, []);
+      dayMap.get(d)!.push(t);
+    });
+
+    const dailyLogs = Array.from(dayMap.entries())
+      .map(([date, items]) => {
+        const stats = calcStats(items);
+        return {
+          date,
+          sales: stats.sales,
+          expenses: stats.expenses,
+          profit: stats.profit,
+          count: stats.count,
+          transactions: items.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+        };
+      })
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    return {
+      today: calcStats(todayTxs),
+      week: calcStats(weekTxs),
+      month: calcStats(monthTxs),
+      allTime: calcStats(txs),
+      dailyLogs,
+      totalCount: txs.length
+    };
+  },
+
   // ================= PERSONAL DATA: INVENTORY =================
   getInventory(): InventoryItem[] {
     const raw = localStorage.getItem(this.getUserKey('inventory'));
@@ -1137,8 +1271,116 @@ export const StorageEngine = {
 
   saveUserProfile(profile: UserProfile) {
     if (!this.isUserLoggedIn()) return;
-    localStorage.setItem(this.getUserKey('profile'), JSON.stringify(profile));
+    // Persist profile while preserving existing cvDetails if not explicitly overwritten
+    const existing = this.getUserProfile();
+    const toSave: UserProfile = {
+      ...profile,
+      cvDetails: profile.cvDetails || existing.cvDetails
+    };
+    localStorage.setItem(this.getUserKey('profile'), JSON.stringify(toSave));
     notifyListeners();
+  },
+
+  // ================= SEPARATE PROFESSIONAL CV DETAILS =================
+  getCVDetails(): CVDetails {
+    const profile = this.getUserProfile();
+    const certificates = this.getCertificates();
+    const certLabels = certificates.map((c) => `${c.courseTitle} Certificate (Earned ${c.dateEarned || '2026'}, Score: ${c.scorePercent}%)`);
+
+    if (profile.cvDetails) {
+      // Ensure newly earned course certificates are included without altering custom CV entries
+      const existingCerts = new Set(profile.cvDetails.customCertifications || []);
+      certLabels.forEach((cl) => existingCerts.add(cl));
+      return {
+        ...profile.cvDetails,
+        customCertifications: Array.from(existingCerts)
+      };
+    }
+
+    // Default baseline CV seeded automatically from Profile info & earned course certificates
+    const baselineCV: CVDetails = {
+      fullName: profile.fullName || 'Vocational Professional',
+      phone: profile.phone || '+263 77 123 4567',
+      email: profile.email || 'artisan@comfortskills.com',
+      suburb: profile.suburb || 'Bulawayo CBD',
+      city: profile.city || 'Bulawayo',
+      headline: profile.headline || 'Certified Vocational Specialist & Technician',
+      summary: profile.bio || 'Skilled, trustworthy artisan with hands-on technical training and certified competence.',
+      driverLicense: profile.driverLicense || 'Class 4 (Clean)',
+      languages: profile.languages && profile.languages.length > 0 ? profile.languages : ['English', 'Ndebele', 'Shona'],
+      skills: profile.skills && profile.skills.length > 0 ? profile.skills : ['Electrical Installation', 'Preventative Maintenance', 'Fault Diagnosis'],
+      experiences: profile.structuredExperiences && profile.structuredExperiences.length > 0 ? profile.structuredExperiences : [
+        {
+          id: 'exp-1',
+          jobTitle: 'Independent Vocational Artisan',
+          company: 'Self-Employed / Freelance',
+          location: 'Bulawayo, Zimbabwe',
+          startDate: '2023-01',
+          endDate: 'Present',
+          isCurrent: true,
+          responsibilities: 'Delivered guaranteed trade services, repairs, and installations for local residential and commercial clients.'
+        }
+      ],
+      educations: profile.structuredEducations && profile.structuredEducations.length > 0 ? profile.structuredEducations : [
+        {
+          id: 'edu-1',
+          qualification: 'Vocational Skills & Practical Trades Certification',
+          institution: 'Comfort Skills & Jobs Hub',
+          yearCompleted: '2026',
+          gradeOrDistinction: 'Certified with Distinction'
+        }
+      ],
+      references: profile.structuredReferences && profile.structuredReferences.length > 0 ? profile.structuredReferences : [
+        {
+          id: 'ref-1',
+          name: 'Tendai Moyo',
+          jobTitle: 'Senior Trade Supervisor',
+          company: 'Bulawayo Trade Works',
+          phone: '+263 77 987 6543',
+          relationship: 'Former Mentor & Supervisor'
+        }
+      ],
+      customCertifications: [
+        ...certLabels,
+        ...(profile.customCertifications || [])
+      ],
+      template: profile.cvTemplate || 'modern_teal',
+      lastSyncedWithProfile: new Date().toISOString()
+    };
+
+    return baselineCV;
+  },
+
+  saveCVDetails(cv: CVDetails) {
+    const profile = this.getUserProfile();
+    const updatedProfile: UserProfile = {
+      ...profile,
+      cvDetails: cv,
+      cvTemplate: cv.template // keep template synchronized
+    };
+    localStorage.setItem(this.getUserKey('profile'), JSON.stringify(updatedProfile));
+    notifyListeners();
+  },
+
+  syncProfileToCV(): CVDetails {
+    const profile = this.getUserProfile();
+    const currentCV = this.getCVDetails();
+    const certificates = this.getCertificates();
+    const certLabels = certificates.map((c) => `${c.courseTitle} Certificate (Earned ${c.dateEarned || '2026'}, Score: ${c.scorePercent}%)`);
+    const allCerts = new Set([...certLabels, ...(currentCV.customCertifications || [])]);
+
+    const updatedCV: CVDetails = {
+      ...currentCV,
+      fullName: profile.fullName || currentCV.fullName,
+      phone: profile.phone || currentCV.phone,
+      email: profile.email || currentCV.email,
+      suburb: profile.suburb || currentCV.suburb,
+      city: profile.city || currentCV.city,
+      customCertifications: Array.from(allCerts),
+      lastSyncedWithProfile: new Date().toISOString()
+    };
+    this.saveCVDetails(updatedCV);
+    return updatedCV;
   },
 
   // ================= SYNC QUEUE & OUTBOX =================
